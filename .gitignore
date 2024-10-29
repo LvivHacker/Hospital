@@ -1,0 +1,14 @@
+# .gitignore
+# Python
+backend/env/
+__pycache__/
+*.py[cod]
+
+# Node.js
+frontend/hospital-app/node_modules/
+frontend/hospital-app/build/
+
+# Environment and secret files
+.env
+backend/.env
+frontend/hospital-app/.env
