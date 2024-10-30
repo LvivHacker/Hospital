@@ -1,9 +1,10 @@
-from pydantic import BaseSettings
+import os
 
-class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5433/Hospital"
-    SECRET_KEY: str = "your_secret_key"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+DATABASE_URL_ASYNC = os.getenv("DATABASE_URL_ASYNC", "postgresql+asyncpg://postgres:postgres@localhost:5433/Hospital")
+DATABASE_URL_SYNC = os.getenv("DATABASE_URL_SYNC", "postgresql+psycopg2://postgres:postgres@localhost:5433/Hospital")
+
+class Settings:
+    DATABASE_URL_ASYNC = DATABASE_URL_ASYNC
+    DATABASE_URL_SYNC = DATABASE_URL_SYNC
 
 settings = Settings()
