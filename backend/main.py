@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 models.Base.metadata.create_all(bind=engine)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = os.environ.get("SECRET_KEY", "your_secret_key")
+SECRET_KEY = os.environ.get("SECRET_KEY", "sdh433423sd342345lklvb99034")
 ALGORITHM = os.environ.get("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 10
 REFRESH_TOKEN_EXPIRE_MINUTES = 10
@@ -56,7 +56,9 @@ def get_db():
     finally:
         db.close()
 
-
+# ----------------
+# User Endpoints
+# ----------------
 @app.post("/register", response_model=schemas.User, status_code=status.HTTP_201_CREATED, tags=["Users"])
 async def register_user(user: schemas.UserCreate, db: db_dependency) -> schemas.User:
     db_user = crud.get_user(db=db, username=user.username)
@@ -64,7 +66,186 @@ async def register_user(user: schemas.UserCreate, db: db_dependency) -> schemas.
         raise HTTPException(status_code=400, detail="User already exists")
     return crud.create_user(db=db, user=user)
 
+@app.get("/users", response_model=List[schemas.User],tags=["Users"])
+async def list_users(db: db_dependency):
+    users = crud.get_users(db=db)
+    return users
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_username: str = payload.get("sub")
+        if user_username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user_id = crud.get_user_id(db, user_username)
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+@app.put("/user/{user_id}", response_model=schemas.User,tags=["Users"])
+async def update_user(user_id: int, user: schemas.UserCreate, db: db_dependency):
+    db_user = crud.update_user(db, user_id, user)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+@app.delete("/user/{user_id}", response_model=dict,tags=["Users"])
+async def delete_user(user_id: int, db: db_dependency):
+    result = crud.delete_user(db, user_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "User deleted successfully"}
+
+
+# -----------------
+# Patient Endpoints
+# -----------------
+@app.post("/patients", response_model=schemas.Patient, status_code=status.HTTP_201_CREATED, tags=["Patients"])
+async def create_patient(patient: schemas.PatientCreate, user_id: int, db: db_dependency):
+    db_patient = crud.create_patient(db, patient, user_id)
+    if not db_patient:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_patient
+
+@app.get("/patients", response_model=List[schemas.Patient], tags=["Patients"])
+async def list_patients(db: db_dependency):
+    return crud.get_patients(db)
+
+@app.get("/patients/{patient_id}", response_model=schemas.Patient, tags=["Patients"])
+async def get_patient(patient_id: int, db: db_dependency):
+    patient = crud.get_patient(db, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return patient
+
+@app.put("/patients/{patient_id}", response_model=schemas.Patient, tags=["Patients"])
+async def update_patient(patient_id: int, patient_update: schemas.PatientCreate, db: db_dependency):
+    updated_patient = crud.update_patient(db, patient_id, patient_update)
+    if not updated_patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return updated_patient
+
+@app.delete("/patients/{patient_id}", response_model=dict, tags=["Patients"])
+async def delete_patient(patient_id: int, db: db_dependency):
+    result = crud.delete_patient(db, patient_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return {"message": "Patient deleted successfully"}
+
+
+
+# ----------------
+# Doctor Endpoints
+# ----------------
+@app.post("/doctors", response_model=schemas.Doctor, status_code=status.HTTP_201_CREATED, tags=["Doctors"])
+async def create_doctor(doctor: schemas.DoctorCreate, user_id: int, db: db_dependency):
+    db_doctor = crud.create_doctor(db, doctor, user_id)
+    if not db_doctor:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_doctor
+
+@app.get("/doctors", response_model=List[schemas.Doctor], tags=["Doctors"])
+async def list_doctors(db: db_dependency):
+    return crud.get_doctors(db)
+
+@app.get("/doctors/{doctor_id}", response_model=schemas.Doctor, tags=["Doctors"])
+async def get_doctor(doctor_id: int, db: db_dependency):
+    doctor = crud.get_doctor(db, doctor_id)
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    return doctor
+
+@app.put("/doctors/{doctor_id}", response_model=schemas.Doctor, tags=["Doctors"])
+async def update_doctor(doctor_id: int, doctor_update: schemas.DoctorCreate, db: db_dependency):
+    updated_doctor = crud.update_doctor(db, doctor_id, doctor_update)
+    if not updated_doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    return updated_doctor
+
+@app.delete("/doctors/{doctor_id}", response_model=dict, tags=["Doctors"])
+async def delete_doctor(doctor_id: int, db: db_dependency):
+    result = crud.delete_doctor(db, doctor_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    return {"message": "Doctor deleted successfully"}
+
+
+# ---------------------
+# Appointmnet Endpoints
+# ---------------------
+@app.post("/appointments", response_model=schemas.Appointment, status_code=status.HTTP_201_CREATED, tags=["Appointments"])
+async def create_appointment(appointment: schemas.AppointmentCreate, db: db_dependency):
+    return crud.create_appointment(db, appointment)
+
+@app.get("/appointments", response_model=List[schemas.Appointment], tags=["Appointments"])
+async def list_appointments(db: db_dependency):
+    return crud.get_appointments(db)
+
+@app.get("/appointments/{appointment_id}", response_model=schemas.Appointment, tags=["Appointments"])
+async def get_appointment(appointment_id: int, db: db_dependency):
+    appointment = crud.get_appointment(db, appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    return appointment
+
+@app.put("/appointments/{appointment_id}", response_model=schemas.Appointment, tags=["Appointments"])
+async def update_appointment(appointment_id: int, appointment_update: schemas.AppointmentCreate, db: db_dependency):
+    updated_appointment = crud.update_appointment(db, appointment_id, appointment_update)
+    if not updated_appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    return updated_appointment
+
+@app.delete("/appointments/{appointment_id}", response_model=dict, tags=["Appointments"])
+async def delete_appointment(appointment_id: int, db: db_dependency):
+    result = crud.delete_appointment(db, appointment_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    return {"message": "Appointment deleted successfully"}
+
+
+# -------------------------
+# Mediacl Records Endpoints
+# -------------------------
+@app.post("/medical_records", response_model=schemas.MedicalRecord, status_code=status.HTTP_201_CREATED, tags=["Medical Records"])
+async def create_medical_record(medical_record: schemas.MedicalRecordCreate, db: db_dependency):
+    return crud.create_medical_record(db, medical_record)
+
+@app.get("/medical_records", response_model=List[schemas.MedicalRecord], tags=["Medical Records"])
+async def list_medical_records(db: db_dependency):
+    return crud.get_medical_records(db)
+
+@app.get("/medical_records/{medical_record_id}", response_model=schemas.MedicalRecord, tags=["Medical Records"])
+async def get_medical_record(medical_record_id: int, db: db_dependency):
+    medical_record = crud.get_medical_record(db, medical_record_id)
+    if not medical_record:
+        raise HTTPException(status_code=404, detail="Medical Record not found")
+    return medical_record
+
+@app.put("/medical_records/{medical_record_id}", response_model=schemas.MedicalRecord, tags=["Medical Records"])
+async def update_medical_record(medical_record_id: int, medical_record_update: schemas.MedicalRecordCreate, db: db_dependency):
+    updated_medical_record = crud.update_medical_record(db, medical_record_id, medical_record_update)
+    if not updated_medical_record:
+        raise HTTPException(status_code=404, detail="Medical Record not found")
+    return updated_medical_record
+
+@app.delete("/medical_records/{medical_record_id}", response_model=dict, tags=["Medical Records"])
+async def delete_medical_record(medical_record_id: int, db: db_dependency):
+    result = crud.delete_medical_record(db, medical_record_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Medical Record not found")
+    return {"message": "Medical Record deleted successfully"}
+
+# ---------------
+# Token Endpoints
+# ---------------
 def authenticate_user(username: str, password: str, db: db_dependency):
     user = crud.get_user(db=db, username=username)
     if not user or not pwd_context.verify(password, user.hashed_password):
@@ -127,7 +308,7 @@ async def verify_user_token(token: str, db: Session = Depends(get_db)):
         "message": "Token is valid",
         "role": user.role,
         "user_id": user.id,
-        "name": user.name,
+        "name": user.full_name,
         "access_token": new_token
     }
 
@@ -153,361 +334,3 @@ async def refresh_access_on_activity(request: Request, call_next):
             pass
 
     return await call_next(request)
-
-@app.get("/users", response_model=List[schemas.User],tags=["Users"])
-async def list_users(db: db_dependency):
-    users = crud.get_users(db=db)
-    return users
-
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_username: str = payload.get("sub")
-        if user_username is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user_id = crud.get_user_id(db, user_username)
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None:
-        raise credentials_exception
-    return user
-
-@app.put("/user/{user_id}", response_model=schemas.User,tags=["Users"])
-async def update_user(user_id: int, user: schemas.UserCreate, db: db_dependency):
-    db_user = crud.update_user(db, user_id, user)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return db_user
-
-
-@app.delete("/user/{user_id}", response_model=dict,tags=["Users"])
-async def delete_user(user_id: int, db: db_dependency):
-    result = crud.delete_user(db, user_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"message": "User deleted successfully"}
-
-
-# #### Exam Routes ####
-
-# @app.post("/exam/", response_model=schemas.Exam, status_code=status.HTTP_201_CREATED, tags=["Exams"])
-# def create_exam(
-#     exam: schemas.ExamCreate,
-#     db: db_dependency,
-#     current_user: models.User = Depends(get_current_user)
-# ):
-#     if current_user.role not in ["teacher", "admin"]:
-#         raise HTTPException(status_code=403, detail="You do not have permission to create an exam")
-
-#     new_exam = models.Exam(
-#         title=exam.title,
-#         description=exam.description,
-#         owner_id=current_user.id
-#     )
-#     db.add(new_exam)
-#     db.commit()
-#     db.refresh(new_exam)
-#     return new_exam
-
-
-# @app.get("/exam/{exam_id}", response_model=schemas.Exam,tags=["Exams"])
-# async def read_exam(exam_id: int, db: db_dependency):
-#     db_exam = crud.read_exam(db=db, exam_id=exam_id)
-#     if db_exam is None:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-#     return db_exam
-
-
-# @app.put("/exam/{exam_id}", response_model=schemas.Exam, tags=["Exams"])
-# async def update_exam(
-#         exam_id: int,
-#         exam: schemas.ExamCreate,
-#         db: db_dependency,
-#         current_user: models.User = Depends(get_current_user)
-# ):
-#     db_exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if db_exam is None:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     if current_user.role != "admin" and db_exam.owner_id != current_user.id:
-#         raise HTTPException(status_code=403, detail="You do not have permission to update this exam")
-
-#     return crud.update_exam(db, exam_id, exam)
-
-
-# @app.delete("/exam/{exam_id}",
-#             response_model=dict,
-#             tags=["Exams"])
-# async def delete_exam(
-#         exam_id: int,
-#         db: db_dependency,
-#         current_user: models.User = Depends(get_current_user)
-# ):
-#     db_exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if db_exam is None:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     if current_user.role != "admin" and db_exam.owner_id != current_user.id:
-#         raise HTTPException(status_code=403, detail="You do not have permission to delete this exam")
-
-#     crud.delete_exam(db, exam_id)
-#     return {"message": "Exam deleted successfully"}
-
-# @app.get("/exams/",
-#          tags=["Exams"])
-# async def read_exams(db: db_dependency):
-#     db_exams = crud.read_exams(db=db)
-#     return db_exams
-
-
-# ### Question Routes ###
-
-
-# @app.post("/exam/{exam_id}/question/",
-#           response_model=schemas.Question,
-#           status_code=status.HTTP_201_CREATED,
-#           tags=["Questions"])
-# async def create_question(
-#         question: schemas.QuestionCreate,
-#         exam_id: int,
-#         db: Session = Depends(get_db),
-#         current_user: models.User = Depends(get_current_user)
-# ):
-#     db_exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if not db_exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     if db_exam.owner_id != current_user.id and current_user.role != "admin":
-#         raise HTTPException(status_code=403, detail="You do not have permission to create a question for this exam")
-
-#     try:
-#         db_question = crud.create_question(db=db, question=question, exam_id=exam_id)
-#         return db_question
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to create question: {str(e)}")
-
-
-# @app.get("/exam/{exam_id}/question/{question_id}",tags=["Questions"])
-# async def read_question(exam_id: int,question_id: int, db: Session = Depends(get_db)):
-#     db_exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if not db_exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-#     result = db.query(models.Question).filter(models.Question.id == question_id).first()
-#     if not result:
-#         raise HTTPException(status_code=404, detail="Question not found")
-#     return result
-
-
-# @app.put("/exam/{exam_id}/question/{question_id}", response_model=schemas.Question, tags=["Questions"])
-# async def update_question(
-#         exam_id: int,
-#         question_id: int,
-#         question: schemas.QuestionCreate,
-#         db: Session = Depends(get_db),
-#         current_user: models.User = Depends(get_current_user)
-# ):
-
-#     db_exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-
-#     if not db_exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     if db_exam.owner_id != current_user.id and current_user.role != "admin":
-#         raise HTTPException(status_code=403, detail="You do not have permission to update this question")
-
-#     db_question = crud.update_question(db, question_id, question)
-#     if db_question is None:
-#         raise HTTPException(status_code=404, detail="Question not found")
-
-#     return db_question
-
-
-# @app.post("/image/",tags=["Images"])
-# async def upload_image(file: UploadFile = File(...)):
-#     file_location = os.path.join(UPLOAD_DIR, file.filename)
-#     with open(file_location, "wb") as f:
-#         f.write(await file.read())
-#     return {"filename": file.filename}
-
-
-# @app.get("/image/{filename}",tags=["Images"])
-# async def get_image(filename: str):
-#     file_path = os.path.join(UPLOAD_DIR, filename)
-#     if not os.path.exists(file_path):
-#         raise HTTPException(status_code=404, detail="File not found")
-#     return FileResponse(file_path)
-
-# @app.delete("/image/{filename}",tags=["Images"])
-# async def delete_image(filename: str):
-#     file_path = os.path.join(UPLOAD_DIR, filename)
-#     if os.path.exists(file_path):
-#         os.remove(file_path)
-#         return {"detail": "Image deleted successfully"}
-#     else:
-#         raise HTTPException(status_code=404, detail="Image not found")
-
-
-# @app.delete("/exam/{exam_id}/question/{question_id}", response_model=dict, tags=["Questions"])
-# async def delete_question(
-#         exam_id: int,
-#         question_id: int,
-#         db: db_dependency,
-#         current_user: models.User = Depends(get_current_user)
-# ):
-#     db_exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-
-#     if not db_exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     if db_exam.owner_id != current_user.id and current_user.role != "admin":
-#         raise HTTPException(status_code=403, detail="You do not have permission to delete this question")
-
-#     result = crud.delete_question(db, question_id)
-#     if not result:
-#         raise HTTPException(status_code=404, detail="Question not found")
-
-#     return {"message": "Question deleted successfully"}
-
-
-# @app.get("/exams/{exam_id}/questions", response_model=List[schemas.Question],tags=["Questions"])
-# async def list_questions_by_exam(exam_id: int, db: db_dependency):
-
-#     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if not exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     questions = crud.get_questions_by_exam(db=db, exam_id=exam_id)
-
-#     if not questions:
-#         raise HTTPException(status_code=404, detail="No questions found for this exam")
-
-#     return questions
-
-# ### Choice Routes ###
-
-
-# @app.post("/exam/{exam_id}/question/{question_id}/choice/", response_model=schemas.Choice,
-#           status_code=status.HTTP_201_CREATED, tags=["Choices"])
-# async def create_choice(
-#         choice: schemas.ChoiceCreate,
-#         exam_id: int,
-#         question_id: int,
-#         db: db_dependency,
-#         current_user: models.User = Depends(get_current_user)
-# ):
-#     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if not exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     if exam.owner_id != current_user.id and current_user.role != "admin":
-#         raise HTTPException(status_code=403, detail="You do not have permission to create choices for this question")
-
-#     question = db.query(models.Question).filter(models.Question.id == question_id).first()
-#     if not question:
-#         raise HTTPException(status_code=404, detail="Question not found")
-
-#     db_choice = crud.create_choice(db=db, choice=choice, question_id=question_id)
-#     return db_choice
-
-
-# @app.get("/exam/{exam_id}/question/{question_id}/choice/{choice_id}", response_model=schemas.Choice,tags=["Choices"])
-# async def read_choice(exam_id: int, question_id: int,choice_id: int, db: Session = Depends(get_db)):
-#     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if not exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-#     question = db.query(models.Question).filter(models.Question.id == question_id).first()
-#     if not question:
-#         raise HTTPException(status_code=404, detail="Question not found")
-#     result = db.query(models.Choice).filter(models.Choice.id == choice_id).first()
-#     if not result:
-#         raise HTTPException(status_code=404, detail="Choice not found")
-#     return result
-
-
-# @app.put("/exam/{exam_id}/question/{question_id}/choice/{choice_id}", response_model=schemas.Choice, tags=["Choices"])
-# async def update_choice(
-#         exam_id: int,
-#         question_id: int,
-#         choice_id: int,
-#         choice: schemas.ChoiceCreate,
-#         db: db_dependency,
-#         current_user: models.User = Depends(get_current_user)
-# ):
-#     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if not exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     if exam.owner_id != current_user.id and current_user.role != "admin":
-#         raise HTTPException(status_code=403, detail="You do not have permission to update choices for this question")
-
-#     question = db.query(models.Question).filter(models.Question.id == question_id).first()
-#     if not question:
-#         raise HTTPException(status_code=404, detail="Question not found")
-
-#     db_choice = crud.update_choice(db=db, choice_id=choice_id, choice=choice)
-#     if db_choice is None:
-#         raise HTTPException(status_code=404, detail="Choice not found")
-
-#     return db_choice
-
-
-# @app.delete("/exam/{exam_id}/question/{question_id}/choice/{choice_id}", response_model=dict, tags=["Choices"])
-# async def delete_choice(
-#         exam_id: int,
-#         question_id: int,
-#         choice_id: int,
-#         db: db_dependency,
-#         current_user: models.User = Depends(get_current_user)
-# ):
-#     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if not exam:
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     if exam.owner_id != current_user.id and current_user.role != "admin":
-#         raise HTTPException(status_code=403, detail="You do not have permission to delete choices for this question")
-
-#     question = db.query(models.Question).filter(models.Question.id == question_id).first()
-#     if not question:
-#         raise HTTPException(status_code=404, detail="Question not found")
-
-#     result = crud.delete_choice(db, choice_id)
-#     if not result:
-#         raise HTTPException(status_code=404, detail="Choice not found")
-
-#     return {"message": "Choice deleted successfully"}
-
-
-# @app.get("/exam/{exam_id}/question/{question_id}/choices",tags=["Choices"])
-# async def list_choices_by_question(exam_id: int, question_id: int, db: Session = Depends(get_db)):
-#     # Check if the exam exists
-#     exam = db.query(models.Exam).filter(models.Exam.id == exam_id).first()
-#     if not exam:
-#         logger.warning(f"Exam with ID {exam_id} not found")
-#         raise HTTPException(status_code=404, detail="Exam not found")
-
-#     # Check if the question belongs to the specified exam
-#     question = db.query(models.Question).filter(
-#         models.Question.id == question_id,
-#         models.Question.exam_id == exam_id
-#     ).first()
-
-#     if not question:
-#         logger.warning(f"Question with ID {question_id} not found for Exam ID {exam_id}")
-#         raise HTTPException(status_code=404, detail="Question not found or does not belong to the specified exam")
-
-#     # Retrieve the choices for the question
-#     choices = db.query(models.Choice).filter(models.Choice.question_id == question_id).all()
-
-#     if not choices:
-#         logger.warning(f"No choices found for Question ID {question_id}")
-#         raise HTTPException(status_code=404, detail="Choices not found for the specified question")
-
-#     # Format the choices to match the expected response model
-#     return [{"id": choice.id, "choice_text": choice.choice_text, "is_correct": choice.is_correct} for choice in choices]

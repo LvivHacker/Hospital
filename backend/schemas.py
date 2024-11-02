@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import date, datetime
 import enum
 
-# Enum for User Roles
+# Enum fowr User Roles
 class UserRole(str, enum.Enum):
     admin = "admin"
     doctor = "doctor"
@@ -14,10 +14,11 @@ class User(BaseModel):
     id: int
     username: str
     email: EmailStr
+    full_name: Optional[str]  # Added full_name here
     role: UserRole
 
     class Config:
-        from_attributes = True  # Enables compatibility with ORMs like SQLAlchemy
+        from_attributes = True
 
 # Schema for Creating a User
 class UserCreate(BaseModel):
@@ -25,6 +26,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: UserRole
+    full_name: Optional[str]  # Added full_name here
 
 # Base Schema for Patient
 class Patient(BaseModel):
@@ -34,7 +36,7 @@ class Patient(BaseModel):
     phone_number: str
     address: str
     medical_history: Optional[str] = None
-    user_id: int  # Linking to the User model
+    user_id: int
 
     class Config:
         from_attributes = True
@@ -53,7 +55,7 @@ class Doctor(BaseModel):
     specialty: str
     phone_number: str
     address: str
-    user_id: int  # Linking to the User model
+    user_id: int
 
     class Config:
         from_attributes = True
@@ -71,7 +73,7 @@ class Appointment(BaseModel):
     doctor_id: int
     appointment_date: datetime
     reason: str
-    medical_records: List['MedicalRecord'] = []  # Linking Medical Records
+    medical_records: List['MedicalRecord'] = []
 
     class Config:
         from_attributes = True
@@ -89,7 +91,7 @@ class MedicalRecord(BaseModel):
     appointment_id: int
     description: str
     created_at: datetime
-    doctor_id: int  # Linking to the Doctor who created the record
+    doctor_id: int
 
     class Config:
         from_attributes = True
@@ -98,5 +100,4 @@ class MedicalRecord(BaseModel):
 class MedicalRecordCreate(BaseModel):
     appointment_id: int
     description: str
-    created_at: datetime
-    doctor_id: int  # Linking to the Doctor who created the record
+    doctor_id: int  # Removed created_at for auto-setting
