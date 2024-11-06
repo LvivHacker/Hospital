@@ -80,6 +80,9 @@ def create_patient(db: Session, patient: schemas.PatientCreate, user_id: int) ->
 def get_patient(db: Session, patient_id: int) -> Optional[models.Patient]:
     return db.query(models.Patient).filter(models.Patient.id == patient_id).first()
 
+def get_patients(db: Session) -> List[models.Patient]:
+    return db.query(models.Patient).all()
+
 def update_patient(db: Session, patient_id: int, patient_update: schemas.PatientCreate) -> Optional[models.Patient]:
     db_patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
     if not db_patient:
@@ -123,6 +126,9 @@ def create_doctor(db: Session, doctor: schemas.DoctorCreate, user_id: int):
 def get_doctor(db: Session, doctor_id: int):
     return db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
 
+def get_doctors(db: Session) -> List[models.Doctor]:
+    return db.query(models.Doctor).all()
+
 def update_doctor(db: Session, doctor_id: int, doctor_update: schemas.DoctorCreate):
     db_doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
     if not db_doctor:
@@ -163,6 +169,9 @@ def create_appointment(db: Session, appointment: schemas.AppointmentCreate):
 
 def get_appointment(db: Session, appointment_id: int):
     return db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
+
+def get_appointments(db: Session) -> List[models.Appointment]:
+    return db.query(models.Appointment).all()
 
 def update_appointment(db: Session, appointment_id: int, appointment_update: schemas.AppointmentCreate):
     db_appointment = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
@@ -205,6 +214,9 @@ def create_medical_record(db: Session, record: schemas.MedicalRecordCreate):
 
 def get_medical_record(db: Session, record_id: int):
     return db.query(models.MedicalRecord).filter(models.MedicalRecord.id == record_id).first()
+
+def get_medical_records(db: Session) -> List[models.MedicalRecord]:
+    return db.query(models.MedicalRecord).all()
 
 def update_medical_record(db: Session, record_id: int, description: str):
     db_record = db.query(models.MedicalRecord).filter(models.MedicalRecord.id == record_id).first()

@@ -140,8 +140,6 @@ async def delete_patient(patient_id: int, db: db_dependency):
         raise HTTPException(status_code=404, detail="Patient not found")
     return {"message": "Patient deleted successfully"}
 
-
-
 # ----------------
 # Doctor Endpoints
 # ----------------
@@ -308,7 +306,7 @@ async def verify_user_token(token: str, db: Session = Depends(get_db)):
         "message": "Token is valid",
         "role": user.role,
         "user_id": user.id,
-        "name": user.full_name,
+        "name": user.full_name ,
         "access_token": new_token
     }
 
@@ -334,3 +332,20 @@ async def refresh_access_on_activity(request: Request, call_next):
             pass
 
     return await call_next(request)
+
+@app.post("/refresh-token")
+async def refresh_access_token(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        # if user_id is None or username is None or role is None:
+        #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
+        user = db.query(models.User).filter(models.User.username == username).first()
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        access_token = create_access_token(data={"sub": username})
+
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
