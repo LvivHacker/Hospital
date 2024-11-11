@@ -18,7 +18,7 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
         email=user.email,
         hashed_password=hashed_password,
         role=user.role,
-        full_name=user.full_name  # Added full_name
+        full_name=user.full_name
     )
     db.add(db_user)
     db.commit()
@@ -81,7 +81,19 @@ def get_patient(db: Session, patient_id: int) -> Optional[models.Patient]:
     return db.query(models.Patient).filter(models.Patient.id == patient_id).first()
 
 def get_patients(db: Session) -> List[models.Patient]:
-    return db.query(models.Patient).all()
+    patients = db.query(models.Patient).all()
+    response = []
+    for patient in patients:
+        response.append({
+            "id": patient.id,
+            "date_of_birth": patient.date_of_birth,
+            "gender": patient.gender,
+            "phone_number": patient.phone_number,
+            "address": patient.address,
+            "medical_history": patient.medical_history,
+            "user_id": patient.user_id
+        })
+    return response
 
 def update_patient(db: Session, patient_id: int, patient_update: schemas.PatientCreate) -> Optional[models.Patient]:
     db_patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
@@ -106,6 +118,9 @@ def delete_patient(db: Session, patient_id: int) -> bool:
     db.delete(db_patient)
     db.commit()
     return True
+
+def get_patient_appointments(db: Session, patient_id: int) -> List[models.Appointment]:
+    return db.query(models.Appointment).filter(models.Appointment.patient_id == patient_id).all()
 
 # -------------------------
 # Doctor Management
@@ -151,18 +166,47 @@ def delete_doctor(db: Session, doctor_id: int):
     db.commit()
     return True
 
+# def confirm_doctor_registration(db: Session, doctor_id: int, doctor_update: schemas.DoctorCreate):
+#     db_doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
+#     if not db_doctor:
+#         return None
+#     # Placeholder for any specific actions for confirming a doctor
+#     db.commit()
+#     return db_doctor
+
 # -------------------------
 # Appointment Management
 # -------------------------
 
-def create_appointment(db: Session, appointment: schemas.AppointmentCreate):
+# def create_appointment(db: Session, appointment: schemas.AppointmentCreate, doctor_id: int, patient_id: int):
+#     db_appointment = models.Appointment(
+#         patient_id=patient_id,
+#         doctor_id=doctor_id,
+#         appointment_date=appointment.appointment_date,
+#         reason=appointment.reason
+#     )
+#     db.add(db_appointment)
+#     db.commit()
+#     db.refresh(db_appointment)
+#     return db_appointment
+
+def create_appointment_request(db: Session, patient_id: int, doctor_id: int, appointment_data: schemas.AppointmentCreate):
     db_appointment = models.Appointment(
-        patient_id=appointment.patient_id,
-        doctor_id=appointment.doctor_id,
-        appointment_date=appointment.appointment_date,
-        reason=appointment.reason
+        patient_id=patient_id,
+        doctor_id=doctor_id,
+        appointment_date=appointment_data.appointment_date,
+        reason=appointment_data.reason
     )
     db.add(db_appointment)
+    db.commit()
+    db.refresh(db_appointment)
+    return db_appointment
+
+def confirm_appointment(db: Session, appointment_id: int):
+    db_appointment = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
+    if not db_appointment:
+        return None
+    # Placeholder for setting appointment confirmation details if needed
     db.commit()
     db.refresh(db_appointment)
     return db_appointment
@@ -200,12 +244,12 @@ def delete_appointment(db: Session, appointment_id: int):
 # Medical Record Management
 # -------------------------
 
-def create_medical_record(db: Session, record: schemas.MedicalRecordCreate):
+def create_medical_record(db: Session, appointment_id: int, record_data: schemas.MedicalRecordCreate):
     db_record = models.MedicalRecord(
-        appointment_id=record.appointment_id,
-        description=record.description,
-        doctor_id=record.doctor_id,
-        created_at=datetime.utcnow()  # Automatically set created_at
+        appointment_id=appointment_id,
+        description=record_data.description,
+        doctor_id=record_data.doctor_id,
+        created_at=datetime.utcnow()
     )
     db.add(db_record)
     db.commit()
@@ -223,8 +267,7 @@ def update_medical_record(db: Session, record_id: int, description: str):
     if not db_record:
         return None
 
-    db_record.description = description  # Only update the description
-
+    db_record.description = description
     db.commit()
     db.refresh(db_record)
     return db_record

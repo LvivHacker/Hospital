@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import date, datetime
 import enum
 
-# Enum fowr User Roles
+# Enum for User Roles
 class UserRole(str, enum.Enum):
     admin = "admin"
     doctor = "doctor"
@@ -14,7 +14,7 @@ class User(BaseModel):
     id: int
     username: str
     email: EmailStr
-    full_name: Optional[str]  # Added full_name here
+    full_name: Optional[str]
     role: UserRole
 
     class Config:
@@ -26,7 +26,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: UserRole
-    full_name: Optional[str]  # Added full_name here
+    full_name: Optional[str]
 
 # Base Schema for Patient
 class Patient(BaseModel):
@@ -55,6 +55,7 @@ class Doctor(BaseModel):
     specialty: str
     phone_number: str
     address: str
+    is_confirmed: bool
     user_id: int
 
     class Config:
@@ -80,8 +81,6 @@ class Appointment(BaseModel):
 
 # Schema for Creating an Appointment
 class AppointmentCreate(BaseModel):
-    patient_id: int
-    doctor_id: int
     appointment_date: datetime
     reason: str
 
@@ -98,6 +97,5 @@ class MedicalRecord(BaseModel):
 
 # Schema for Creating a Medical Record
 class MedicalRecordCreate(BaseModel):
-    appointment_id: int
     description: str
-    doctor_id: int  # Removed created_at for auto-setting
+    doctor_id: int  # No created_at field, it is set automatically

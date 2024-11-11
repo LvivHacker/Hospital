@@ -6,11 +6,13 @@ from datetime import datetime
 
 Base = declarative_base()
 
+# Enum for User Roles
 class UserRole(str, enum.Enum):
     admin = "admin"
     doctor = "doctor"
     patient = "patient"
 
+# User model with roles and active status
 class User(Base):
     __tablename__ = 'users'
     
@@ -19,12 +21,13 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     full_name = Column(String)
     hashed_password = Column(String)
-    is_active = Column(Boolean, default=True)
     role = Column(Enum(UserRole))
 
+    # Relationships to Patient and Doctor models, one-to-one
     patient = relationship('Patient', back_populates='user', uselist=False)
     doctor = relationship('Doctor', back_populates='user', uselist=False)
 
+# Patient model with medical history and appointment relationship
 class Patient(Base):
     __tablename__ = 'patients'
     
@@ -39,6 +42,7 @@ class Patient(Base):
     user = relationship('User', back_populates='patient')
     appointments = relationship('Appointment', back_populates='patient')
 
+# Doctor model with confirmation and appointment/medical record relationships
 class Doctor(Base):
     __tablename__ = 'doctors'
     
@@ -46,12 +50,14 @@ class Doctor(Base):
     specialty = Column(String)
     phone_number = Column(String)
     address = Column(String)
+    is_confirmed = Column(Boolean, default=False)  # Added confirmation field
     user_id = Column(Integer, ForeignKey('users.id'), unique=True)
 
     user = relationship('User', back_populates='doctor')
     appointments = relationship('Appointment', back_populates='doctor')
     medical_records = relationship('MedicalRecord', back_populates='doctor')
 
+# Appointment model with cascade delete for related MedicalRecords
 class Appointment(Base):
     __tablename__ = 'appointments'
     
@@ -63,8 +69,9 @@ class Appointment(Base):
 
     patient = relationship('Patient', back_populates='appointments')
     doctor = relationship('Doctor', back_populates='appointments')
-    medical_records = relationship('MedicalRecord', back_populates='appointment')
+    medical_records = relationship('MedicalRecord', back_populates='appointment', cascade="all, delete")
 
+# Medical Record model with doctor relationship
 class MedicalRecord(Base):
     __tablename__ = 'medical_records'
     

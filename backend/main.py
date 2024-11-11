@@ -56,6 +56,16 @@ def get_db():
     finally:
         db.close()
 
+# Helper functions to check user role
+def is_patient(user: models.User) -> bool:
+    return user.role == "patient"
+
+def is_doctor(user: models.User) -> bool:
+    return user.role == "doctor"
+
+def is_admin(user: models.User) -> bool:
+    return user.role == "admin"
+
 # ----------------
 # User Endpoints
 # ----------------
@@ -104,6 +114,137 @@ async def delete_user(user_id: int, db: db_dependency):
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted successfully"}
 
+# ---------------
+# Token Endpoints
+# ---------------
+def authenticate_user(username: str, password: str, db: db_dependency):
+    user = crud.get_user(db=db, username=username)
+    if not user or not pwd_context.verify(password, user.hashed_password):
+        return False
+    return user
+
+def create_access_token(data: dict, role: str, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
+    to_encode.update({
+        'exp': expire,
+        'iat': datetime.now(timezone.utc),  # Issued-at timestamp
+        'role': role  # Add the user's role to the payload
+    })
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+
+def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+@app.post("/token", tags=['Tokens'])
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = authenticate_user(form_data.username, form_data.password, db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    # Pass the user's role to include it in the token payload
+    access_token = create_access_token(
+        data={"sub": user.username, "name": user.full_name},
+        role=user.role,
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    refresh_token = create_refresh_token(data={"sub": user.username})
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+
+
+def verify_token(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=403, detail="Token is invalid")
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=403, detail="Token is invalid")
+
+
+@app.get("/verify-token/{token}", tags=['Tokens'])
+async def verify_user_token(token: str, db: Session = Depends(get_db)):
+    payload = verify_token(token=token)
+    username = payload.get("sub")
+    user = crud.get_user(db, username=username)
+
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_token = create_access_token({"sub": username}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+
+    return {
+        "message": "Token is valid",
+        "role": user.role,
+        "user_id": user.id,
+        "name": user.full_name ,
+        "access_token": new_token
+    }
+
+@app.post("/refresh-token", tags=['Tokens'])
+async def refresh_access_token(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        # if user_id is None or username is None or role is None:
+        #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
+        user = db.query(models.User).filter(models.User.username == username).first()
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        access_token = create_access_token(data={"sub": username})
+
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
+
+# -----------------
+# Admin Endpoints
+# -----------------
+# @app.put("/doctors/{doctor_id}/confirm", response_model=schemas.Doctor, tags=["Admins"])
+# async def confirm_doctor_registration(
+#     doctor_id: int, 
+#     current_user: models.User = Depends(get_current_user), 
+#     db: Session = Depends(get_db)
+# ):
+#     if not is_admin(current_user):
+#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can confirm doctor registration.")
+#     return crud.confirm_doctor_registration(db, doctor_id)
+
+# @app.get("/patients", response_model=List[schemas.Patient], tags=["Admins"])
+# async def list_patients(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+#     if not is_admin(current_user):
+#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can view the list of patients.")
+#     return crud.get_patients(db)
+
+# @app.delete("/users/{user_id}", tags=["Admins"])
+# async def delete_user(
+#     user_id: int, 
+#     current_user: models.User = Depends(get_current_user), 
+#     db: Session = Depends(get_db)
+# ):
+#     if not is_admin(current_user):
+#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can delete users.")
+#     return crud.delete_user(db, user_id)
+
+# @app.get("/users", response_model=List[schemas.User], tags=["Admins"])
+# async def list_all_users(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+#     if not is_admin(current_user):
+#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can view all users.")
+#     return crud.get_users(db)
+
+
 
 # -----------------
 # Patient Endpoints
@@ -115,16 +256,39 @@ async def create_patient(patient: schemas.PatientCreate, user_id: int, db: db_de
         raise HTTPException(status_code=404, detail="User not found")
     return db_patient
 
-@app.get("/patients", response_model=List[schemas.Patient], tags=["Patients"])
+@app.get("/patients", response_model=List[schemas.Patient])
 async def list_patients(db: db_dependency):
-    return crud.get_patients(db)
+    patients = crud.get_patients(db=db)
+    return patients
 
-@app.get("/patients/{patient_id}", response_model=schemas.Patient, tags=["Patients"])
+@app.get("/patients/{patient_id}", response_model=schemas.Patient)
 async def get_patient(patient_id: int, db: db_dependency):
     patient = crud.get_patient(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return patient
+
+@app.post("/patients/{patient_id}/{doctor_id}/appointment-request", response_model=schemas.Appointment, tags=["Patients"])
+async def create_appointment_request(
+    patient_id: int,
+    doctor_id: int,
+    appointment_data: schemas.AppointmentCreate, 
+    current_user: models.User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if not is_patient(current_user) or current_user.id != patient_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the patient can create appointment requests.")
+    return crud.create_appointment_request(db, patient_id, doctor_id, appointment_data)
+
+@app.get("/patients/{patient_id}/appointments", response_model=List[schemas.Appointment], tags=["Patients"])
+async def get_patient_appointments(
+    patient_id: int, 
+    current_user: models.User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if not is_patient(current_user) or current_user.id != patient_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the patient can view their own appointments.")
+    return crud.get_patient_appointments(db, patient_id)
 
 @app.put("/patients/{patient_id}", response_model=schemas.Patient, tags=["Patients"])
 async def update_patient(patient_id: int, patient_update: schemas.PatientCreate, db: db_dependency):
@@ -143,6 +307,7 @@ async def delete_patient(patient_id: int, db: db_dependency):
 # ----------------
 # Doctor Endpoints
 # ----------------
+
 @app.post("/doctors", response_model=schemas.Doctor, status_code=status.HTTP_201_CREATED, tags=["Doctors"])
 async def create_doctor(doctor: schemas.DoctorCreate, user_id: int, db: db_dependency):
     db_doctor = crud.create_doctor(db, doctor, user_id)
@@ -150,16 +315,38 @@ async def create_doctor(doctor: schemas.DoctorCreate, user_id: int, db: db_depen
         raise HTTPException(status_code=404, detail="User not found")
     return db_doctor
 
-@app.get("/doctors", response_model=List[schemas.Doctor], tags=["Doctors"])
+@app.get("/doctors", response_model=List[schemas.Doctor])
 async def list_doctors(db: db_dependency):
-    return crud.get_doctors(db)
+    doctors = crud.get_doctors(db=db)
+    return doctors
 
-@app.get("/doctors/{doctor_id}", response_model=schemas.Doctor, tags=["Doctors"])
+@app.get("/doctors/{doctor_id}", response_model=schemas.Doctor)
 async def get_doctor(doctor_id: int, db: db_dependency):
     doctor = crud.get_doctor(db, doctor_id)
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
     return doctor
+
+@app.put("/appointments/{appointment_id}/confirm", response_model=schemas.Appointment, tags=["Doctors"])
+async def confirm_appointment(
+    appointment_id: int, 
+    current_user: models.User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if not is_doctor(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only doctors can confirm appointments.")
+    return crud.confirm_appointment(db, appointment_id)
+
+@app.post("/appointments/{appointment_id}/medical_record", response_model=schemas.MedicalRecord, tags=["Doctors"])
+async def add_medical_record(
+    appointment_id: int, 
+    record_data: schemas.MedicalRecordCreate, 
+    current_user: models.User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if not is_doctor(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only doctors can add medical records.")
+    return crud.create_medical_record(db, appointment_id, record_data)
 
 @app.put("/doctors/{doctor_id}", response_model=schemas.Doctor, tags=["Doctors"])
 async def update_doctor(doctor_id: int, doctor_update: schemas.DoctorCreate, db: db_dependency):
@@ -175,13 +362,19 @@ async def delete_doctor(doctor_id: int, db: db_dependency):
         raise HTTPException(status_code=404, detail="Doctor not found")
     return {"message": "Doctor deleted successfully"}
 
-
 # ---------------------
 # Appointmnet Endpoints
 # ---------------------
-@app.post("/appointments", response_model=schemas.Appointment, status_code=status.HTTP_201_CREATED, tags=["Appointments"])
-async def create_appointment(appointment: schemas.AppointmentCreate, db: db_dependency):
-    return crud.create_appointment(db, appointment)
+
+# @app.post("/doctor/{doctor_id}/patient/{patient_id}/appointment", response_model=schemas.Appointment, status_code=status.HTTP_201_CREATED, tags=["Appointments"])
+# async def create_appointment(doctor_id: int, patient_id: int, appointment: schemas.AppointmentCreate, db: db_dependency):
+#     doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
+#     if not doctor:
+#         raise HTTPException(status_code = 404, detail="Doctor not found")
+#     patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
+#     if not patient:
+#         raise HTTPException(status_code = 404, detail="Patient not found")
+#     return crud.create_appointment(db, doctor_id = doctor_id, patient_id = patient_id, appointment = appointment)
 
 @app.get("/appointments", response_model=List[schemas.Appointment], tags=["Appointments"])
 async def list_appointments(db: db_dependency):
@@ -212,9 +405,6 @@ async def delete_appointment(appointment_id: int, db: db_dependency):
 # -------------------------
 # Mediacl Records Endpoints
 # -------------------------
-@app.post("/medical_records", response_model=schemas.MedicalRecord, status_code=status.HTTP_201_CREATED, tags=["Medical Records"])
-async def create_medical_record(medical_record: schemas.MedicalRecordCreate, db: db_dependency):
-    return crud.create_medical_record(db, medical_record)
 
 @app.get("/medical_records", response_model=List[schemas.MedicalRecord], tags=["Medical Records"])
 async def list_medical_records(db: db_dependency):
@@ -228,8 +418,15 @@ async def get_medical_record(medical_record_id: int, db: db_dependency):
     return medical_record
 
 @app.put("/medical_records/{medical_record_id}", response_model=schemas.MedicalRecord, tags=["Medical Records"])
-async def update_medical_record(medical_record_id: int, medical_record_update: schemas.MedicalRecordCreate, db: db_dependency):
+async def update_medical_record(
+    medical_record_id: int, 
+    medical_record_update: schemas.MedicalRecordCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     updated_medical_record = crud.update_medical_record(db, medical_record_id, medical_record_update)
+    if not is_doctor(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only doctors can update medical records.")
     if not updated_medical_record:
         raise HTTPException(status_code=404, detail="Medical Record not found")
     return updated_medical_record
@@ -240,112 +437,3 @@ async def delete_medical_record(medical_record_id: int, db: db_dependency):
     if not result:
         raise HTTPException(status_code=404, detail="Medical Record not found")
     return {"message": "Medical Record deleted successfully"}
-
-# ---------------
-# Token Endpoints
-# ---------------
-def authenticate_user(username: str, password: str, db: db_dependency):
-    user = crud.get_user(db=db, username=username)
-    if not user or not pwd_context.verify(password, user.hashed_password):
-        return False
-    return user
-
-
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
-    to_encode.update({'exp': expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-@app.post("/token")
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = authenticate_user(form_data.username, form_data.password, db)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    access_token = create_access_token(data={"sub": user.username},
-                                       expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    refresh_token = create_refresh_token(data={"sub": user.username})
-    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
-
-
-def verify_token(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=403, detail="Token is invalid")
-        return payload
-    except JWTError:
-        raise HTTPException(status_code=403, detail="Token is invalid")
-
-
-@app.get("/verify-token/{token}")
-async def verify_user_token(token: str, db: Session = Depends(get_db)):
-    payload = verify_token(token=token)
-    username = payload.get("sub")
-    user = crud.get_user(db, username=username)
-
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    new_token = create_access_token({"sub": username}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-
-    return {
-        "message": "Token is valid",
-        "role": user.role,
-        "user_id": user.id,
-        "name": user.full_name ,
-        "access_token": new_token
-    }
-
-
-@app.middleware("http")
-async def refresh_access_on_activity(request: Request, call_next):
-    token = request.headers.get("Authorization")
-    if token:
-        token = token.split(" ")[1]  # remove 'Bearer' prefix
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            username = payload.get("sub")
-            if username:
-                request.state.user = username
-                new_access_token = create_access_token(
-                    data={"sub": username},
-                    expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-                )
-                response = await call_next(request)
-                response.headers["x-new-access-token"] = new_access_token
-                return response
-        except JWTError:
-            pass
-
-    return await call_next(request)
-
-@app.post("/refresh-token")
-async def refresh_access_token(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        # if user_id is None or username is None or role is None:
-        #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
-        user = db.query(models.User).filter(models.User.username == username).first()
-        if user is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        access_token = create_access_token(data={"sub": username})
-
-        return {"access_token": access_token, "token_type": "bearer"}
-
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
