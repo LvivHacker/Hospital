@@ -115,6 +115,55 @@ async def delete_user(user_id: int, db: db_dependency):
     return {"message": "User deleted successfully"}
 
 # ---------------
+# Admin Endpoints
+# ---------------
+@app.put("/doctors/{doctor_id}/confirm", response_model=schemas.User)
+async def confirm_doctor_registration(user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+    doctor = crud.get_user_by_id(db, user_id)
+    if not is_doctor(doctor):
+        raise HTTPException(status_code=403, detail="This user is not a doctor")
+    return crud.confirm_doctor(db, user_id)
+
+@app.get("/users", response_model=List[schemas.User])
+async def list_all_users(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin privilege required")
+    return crud.get_users(db)
+
+# -----------------
+# Patient Endpoints
+# -----------------
+@app.get("/doctors", response_model=List[schemas.User], tags=["Patients"])
+async def list_doctors(db: Session = Depends(get_db)):
+    return crud.get_doctors(db)
+
+@app.post("/patients/{patient_id}/appointments/{doctor_id}", response_model=schemas.Meeting, tags=["Patients"])
+async def request_appointment(patient_id: int, doctor_id: int, meeting_data: schemas.MeetingCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not is_patient(current_user) or current_user.id != patient_id:
+        raise HTTPException(status_code=403, detail="Only patients can request appointments")
+    return crud.create_meeting_request(db, meeting_data, patient_id, doctor_id)
+
+# -----------------
+# Doctor Endpoints
+# -----------------
+@app.put("/meetings/{meeting_id}/{status}", tags=["Doctors"])
+async def confirm_meeting(meeting_id: int, status: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not is_doctor(current_user):
+        raise HTTPException(status_code=403, detail="Only doctors can confirm meetings")
+    request = crud.confirm_meeting(db=db, meeting_id=meeting_id, status=status)
+    if isinstance(request, bool):
+        return "Wrong status code!"
+    return request
+
+@app.post("/meetings/{meeting_id}/records", response_model=schemas.MedicalRecord, tags=["Doctors"])
+async def create_medical_record(meeting_id: int, record_data: schemas.MedicalRecordCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not is_doctor(current_user):
+        raise HTTPException(status_code=403, detail="Only doctors can create medical records")
+    return crud.create_medical_record(db, meeting_id, record_data)
+
+# ---------------
 # Token Endpoints
 # ---------------
 def authenticate_user(username: str, password: str, db: db_dependency):
@@ -132,7 +181,6 @@ def create_access_token(data: dict, role: str, expires_delta: timedelta | None =
         'role': role  # Add the user's role to the payload
     })
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
 
 
 def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
@@ -153,7 +201,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     # Pass the user's role to include it in the token payload
     access_token = create_access_token(
-        data={"sub": user.username, "name": user.full_name},
+        data={"sub": user.username, "name": user.name, "surname": user.surname},
         role=user.role,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
@@ -182,15 +230,22 @@ async def verify_user_token(token: str, db: Session = Depends(get_db)):
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    new_token = create_access_token({"sub": username}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    # Pass role and name in data without using timedelta here
+    new_token = create_access_token(
+        data={"sub": user.username, "name": user.name, "surname": user.surname},
+        role = user.role,
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)  # Pass timedelta only as an argument here
+    )
 
     return {
         "message": "Token is valid",
         "role": user.role,
         "user_id": user.id,
-        "name": user.full_name ,
+        "name": user.name,
+        "surname": user.surname,
         "access_token": new_token
     }
+
 
 @app.post("/refresh-token", tags=['Tokens'])
 async def refresh_access_token(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -202,201 +257,37 @@ async def refresh_access_token(token: str = Depends(oauth2_scheme), db: Session 
         user = db.query(models.User).filter(models.User.username == username).first()
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        access_token = create_access_token(data={"sub": username})
+        access_token = create_access_token(data={"sub": username}, role={"role": user.role})
 
         return {"access_token": access_token, "token_type": "bearer"}
 
     except JWTError:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
 
-# -----------------
-# Admin Endpoints
-# -----------------
-# @app.put("/doctors/{doctor_id}/confirm", response_model=schemas.Doctor, tags=["Admins"])
-# async def confirm_doctor_registration(
-#     doctor_id: int, 
-#     current_user: models.User = Depends(get_current_user), 
-#     db: Session = Depends(get_db)
-# ):
-#     if not is_admin(current_user):
-#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can confirm doctor registration.")
-#     return crud.confirm_doctor_registration(db, doctor_id)
-
-# @app.get("/patients", response_model=List[schemas.Patient], tags=["Admins"])
-# async def list_patients(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-#     if not is_admin(current_user):
-#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can view the list of patients.")
-#     return crud.get_patients(db)
-
-# @app.delete("/users/{user_id}", tags=["Admins"])
-# async def delete_user(
-#     user_id: int, 
-#     current_user: models.User = Depends(get_current_user), 
-#     db: Session = Depends(get_db)
-# ):
-#     if not is_admin(current_user):
-#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can delete users.")
-#     return crud.delete_user(db, user_id)
-
-# @app.get("/users", response_model=List[schemas.User], tags=["Admins"])
-# async def list_all_users(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-#     if not is_admin(current_user):
-#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators can view all users.")
-#     return crud.get_users(db)
-
-
-
-# -----------------
-# Patient Endpoints
-# -----------------
-@app.post("/patients", response_model=schemas.Patient, status_code=status.HTTP_201_CREATED, tags=["Patients"])
-async def create_patient(patient: schemas.PatientCreate, user_id: int, db: db_dependency):
-    db_patient = crud.create_patient(db, patient, user_id)
-    if not db_patient:
-        raise HTTPException(status_code=404, detail="User not found")
-    return db_patient
-
-@app.get("/patients", response_model=List[schemas.Patient])
-async def list_patients(db: db_dependency):
-    patients = crud.get_patients(db=db)
-    return patients
-
-@app.get("/patients/{patient_id}", response_model=schemas.Patient)
-async def get_patient(patient_id: int, db: db_dependency):
-    patient = crud.get_patient(db, patient_id)
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    return patient
-
-@app.post("/patients/{patient_id}/{doctor_id}/appointment-request", response_model=schemas.Appointment, tags=["Patients"])
-async def create_appointment_request(
-    patient_id: int,
-    doctor_id: int,
-    appointment_data: schemas.AppointmentCreate, 
-    current_user: models.User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
-    if not is_patient(current_user) or current_user.id != patient_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the patient can create appointment requests.")
-    return crud.create_appointment_request(db, patient_id, doctor_id, appointment_data)
-
-@app.get("/patients/{patient_id}/appointments", response_model=List[schemas.Appointment], tags=["Patients"])
-async def get_patient_appointments(
-    patient_id: int, 
-    current_user: models.User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
-    if not is_patient(current_user) or current_user.id != patient_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the patient can view their own appointments.")
-    return crud.get_patient_appointments(db, patient_id)
-
-@app.put("/patients/{patient_id}", response_model=schemas.Patient, tags=["Patients"])
-async def update_patient(patient_id: int, patient_update: schemas.PatientCreate, db: db_dependency):
-    updated_patient = crud.update_patient(db, patient_id, patient_update)
-    if not updated_patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    return updated_patient
-
-@app.delete("/patients/{patient_id}", response_model=dict, tags=["Patients"])
-async def delete_patient(patient_id: int, db: db_dependency):
-    result = crud.delete_patient(db, patient_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    return {"message": "Patient deleted successfully"}
-
-# ----------------
-# Doctor Endpoints
-# ----------------
-
-@app.post("/doctors", response_model=schemas.Doctor, status_code=status.HTTP_201_CREATED, tags=["Doctors"])
-async def create_doctor(doctor: schemas.DoctorCreate, user_id: int, db: db_dependency):
-    db_doctor = crud.create_doctor(db, doctor, user_id)
-    if not db_doctor:
-        raise HTTPException(status_code=404, detail="User not found")
-    return db_doctor
-
-@app.get("/doctors", response_model=List[schemas.Doctor])
-async def list_doctors(db: db_dependency):
-    doctors = crud.get_doctors(db=db)
-    return doctors
-
-@app.get("/doctors/{doctor_id}", response_model=schemas.Doctor)
-async def get_doctor(doctor_id: int, db: db_dependency):
-    doctor = crud.get_doctor(db, doctor_id)
-    if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
-    return doctor
-
-@app.put("/appointments/{appointment_id}/confirm", response_model=schemas.Appointment, tags=["Doctors"])
-async def confirm_appointment(
-    appointment_id: int, 
-    current_user: models.User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
-    if not is_doctor(current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only doctors can confirm appointments.")
-    return crud.confirm_appointment(db, appointment_id)
-
-@app.post("/appointments/{appointment_id}/medical_record", response_model=schemas.MedicalRecord, tags=["Doctors"])
-async def add_medical_record(
-    appointment_id: int, 
-    record_data: schemas.MedicalRecordCreate, 
-    current_user: models.User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
-):
-    if not is_doctor(current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only doctors can add medical records.")
-    return crud.create_medical_record(db, appointment_id, record_data)
-
-@app.put("/doctors/{doctor_id}", response_model=schemas.Doctor, tags=["Doctors"])
-async def update_doctor(doctor_id: int, doctor_update: schemas.DoctorCreate, db: db_dependency):
-    updated_doctor = crud.update_doctor(db, doctor_id, doctor_update)
-    if not updated_doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
-    return updated_doctor
-
-@app.delete("/doctors/{doctor_id}", response_model=dict, tags=["Doctors"])
-async def delete_doctor(doctor_id: int, db: db_dependency):
-    result = crud.delete_doctor(db, doctor_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Doctor not found")
-    return {"message": "Doctor deleted successfully"}
-
 # ---------------------
 # Appointmnet Endpoints
 # ---------------------
+@app.get("/meetings", response_model=List[schemas.Meeting], tags=["Appointments"])
+async def list_meetings(db: db_dependency):
+    return crud.get_meetings(db)
 
-# @app.post("/doctor/{doctor_id}/patient/{patient_id}/appointment", response_model=schemas.Appointment, status_code=status.HTTP_201_CREATED, tags=["Appointments"])
-# async def create_appointment(doctor_id: int, patient_id: int, appointment: schemas.AppointmentCreate, db: db_dependency):
-#     doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
-#     if not doctor:
-#         raise HTTPException(status_code = 404, detail="Doctor not found")
-#     patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
-#     if not patient:
-#         raise HTTPException(status_code = 404, detail="Patient not found")
-#     return crud.create_appointment(db, doctor_id = doctor_id, patient_id = patient_id, appointment = appointment)
-
-@app.get("/appointments", response_model=List[schemas.Appointment], tags=["Appointments"])
-async def list_appointments(db: db_dependency):
-    return crud.get_appointments(db)
-
-@app.get("/appointments/{appointment_id}", response_model=schemas.Appointment, tags=["Appointments"])
-async def get_appointment(appointment_id: int, db: db_dependency):
-    appointment = crud.get_appointment(db, appointment_id)
+@app.get("/meetings/{meeting_id}", response_model=schemas.Meeting, tags=["Appointments"])
+async def get_meeting(appointment_id: int, db: db_dependency):
+    appointment = crud.get_meeting(db, appointment_id)
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
     return appointment
 
-@app.put("/appointments/{appointment_id}", response_model=schemas.Appointment, tags=["Appointments"])
-async def update_appointment(appointment_id: int, appointment_update: schemas.AppointmentCreate, db: db_dependency):
-    updated_appointment = crud.update_appointment(db, appointment_id, appointment_update)
+@app.put("/meetings/{meeting_id}", response_model=schemas.Meeting, tags=["Appointments"])
+async def update_meeting(appointment_id: int, appointment_update: schemas.MeetingCreate, db: db_dependency):
+    updated_appointment = crud.update_meeting(db, appointment_id, appointment_update)
     if not updated_appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
     return updated_appointment
 
 @app.delete("/appointments/{appointment_id}", response_model=dict, tags=["Appointments"])
-async def delete_appointment(appointment_id: int, db: db_dependency):
-    result = crud.delete_appointment(db, appointment_id)
+async def delete_meeting(appointment_id: int, db: db_dependency):
+    result = crud.delete_meeting(db, appointment_id)
     if not result:
         raise HTTPException(status_code=404, detail="Appointment not found")
     return {"message": "Appointment deleted successfully"}
@@ -405,7 +296,6 @@ async def delete_appointment(appointment_id: int, db: db_dependency):
 # -------------------------
 # Mediacl Records Endpoints
 # -------------------------
-
 @app.get("/medical_records", response_model=List[schemas.MedicalRecord], tags=["Medical Records"])
 async def list_medical_records(db: db_dependency):
     return crud.get_medical_records(db)
@@ -437,3 +327,86 @@ async def delete_medical_record(medical_record_id: int, db: db_dependency):
     if not result:
         raise HTTPException(status_code=404, detail="Medical Record not found")
     return {"message": "Medical Record deleted successfully"}
+
+# -------------------------
+# Medicone Endpoints
+# -------------------------
+@app.post("/medical_records/{mediacl_record_id}/medicines",response_model=schemas.Medicine, tags=["Medicines"])
+async def add_medicine(
+    medical_record_id: int, 
+    medicine_data: schemas.MedicineCreate, 
+    current_user: models.User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if not is_doctor(current_user):
+        raise HTTPException(
+            status_code=403, 
+            detail="Only doctors can create medical records"
+        )
+    medical_record = crud.get_medical_record(db, medical_record_id)
+    meeting = crud.get_meeting(db, medical_record.meeting_id)
+    if not meeting or meeting.doctor_id != current_user.id:
+        raise HTTPException(
+            status_code = 403,
+            detail = "You can only prescribe medicines for your own meetings."
+        )
+    return crud.create_medicine(db, medicine_data, medical_record_id)
+
+@app.put("/medicines/{medicine_id}", response_model=schemas.Medicine, tags=["Medicines"])
+async def update_medicine(
+    medicine_id: int,
+    medicine_update: schemas.Medicine,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Ensure the current user is a doctor
+    if not is_doctor(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only doctors can update medicines."
+        )
+    
+    # Validate the doctor is linked to the medicine's medical record
+    medicine = crud.get_medicine_by_id(db, medicine_id)
+    if not medicine:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Medicine not found.")
+    
+    medical_record = crud.get_medical_record(db, medicine.medical_record_id)
+    appointment = crud.get_meeting(db, medical_record.meeting_id)
+    if appointment.doctor_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to update this medicine."
+        )
+    # Update the medicine
+    return crud.update_medicine(db, medicine_id, medicine_update)
+
+@app.delete("/medicines/{medicine_id}", response_model=dict, tags=["Medicines"])
+async def delete_medicine(
+    medicine_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Ensure the current user is a doctor
+    if not is_doctor(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only doctors can delete medicines."
+        )
+    
+    # Validate the doctor is linked to the medicine's medical record
+    medicine = crud.get_medicine_by_id(db, medicine_id)
+    if not medicine:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Medicine not found.")
+    
+    medical_record = crud.get_medical_record(db, medicine.medical_record_id)
+    appointment = crud.get_meeting(db, medical_record.meeting_id)
+    if appointment.doctor_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to delete this medicine."
+        )
+    
+    # Delete the medicine
+    result = crud.delete_medicine(db, medicine_id)
+    return {"message": "Medicine deleted successfully"}

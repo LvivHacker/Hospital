@@ -1,9 +1,9 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
+from datetime import datetime
 import models
 import schemas
-from datetime import datetime
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -17,8 +17,9 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
+        name=user.name,
+        surname=user.surname,
         role=user.role,
-        full_name=user.full_name
     )
     db.add(db_user)
     db.commit()
@@ -27,6 +28,9 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
 
 def get_user(db: Session, username: str) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.username == username).first()
+
+def get_user_by_id(db: Session, user_id: str) -> Optional[models.User]:
+    return db.query(models.User).filter(models.User.id == user_id).first()
 
 def get_user_id(db: Session, username: str) -> Optional[int]:
     user = get_user(db, username)
@@ -40,7 +44,8 @@ def update_user(db: Session, user_id: int, user_update: schemas.UserCreate) -> O
     db_user.username = user_update.username
     db_user.email = user_update.email
     db_user.hashed_password = pwd_context.hash(user_update.password)
-    db_user.full_name = user_update.full_name
+    db_user.name = user_update.name
+    db_user.surname = user_update.surname
     db_user.role = user_update.role
 
     db.commit()
@@ -59,184 +64,79 @@ def delete_user(db: Session, user_id: int) -> bool:
 def get_users(db: Session) -> List[models.User]:
     return db.query(models.User).all()
 
-# -------------------------
-# Patient Management
-# -------------------------
-
-def create_patient(db: Session, patient: schemas.PatientCreate, user_id: int) -> models.Patient:
-    db_patient = models.Patient(
-        user_id=user_id,
-        date_of_birth=patient.date_of_birth,
-        gender=patient.gender,
-        phone_number=patient.phone_number,
-        address=patient.address,
-        medical_history=patient.medical_history
-    )
-    db.add(db_patient)
-    db.commit()
-    db.refresh(db_patient)
-    return db_patient
-
-def get_patient(db: Session, patient_id: int) -> Optional[models.Patient]:
-    return db.query(models.Patient).filter(models.Patient.id == patient_id).first()
-
-def get_patients(db: Session) -> List[models.Patient]:
-    patients = db.query(models.Patient).all()
-    response = []
-    for patient in patients:
-        response.append({
-            "id": patient.id,
-            "date_of_birth": patient.date_of_birth,
-            "gender": patient.gender,
-            "phone_number": patient.phone_number,
-            "address": patient.address,
-            "medical_history": patient.medical_history,
-            "user_id": patient.user_id
-        })
-    return response
-
-def update_patient(db: Session, patient_id: int, patient_update: schemas.PatientCreate) -> Optional[models.Patient]:
-    db_patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
-    if not db_patient:
-        return None
-
-    db_patient.date_of_birth = patient_update.date_of_birth
-    db_patient.gender = patient_update.gender
-    db_patient.phone_number = patient_update.phone_number
-    db_patient.address = patient_update.address
-    db_patient.medical_history = patient_update.medical_history
-
-    db.commit()
-    db.refresh(db_patient)
-    return db_patient
-
-def delete_patient(db: Session, patient_id: int) -> bool:
-    db_patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
-    if not db_patient:
-        return False
-
-    db.delete(db_patient)
-    db.commit()
-    return True
-
-def get_patient_appointments(db: Session, patient_id: int) -> List[models.Appointment]:
-    return db.query(models.Appointment).filter(models.Appointment.patient_id == patient_id).all()
-
-# -------------------------
-# Doctor Management
-# -------------------------
-
-def create_doctor(db: Session, doctor: schemas.DoctorCreate, user_id: int):
-    db_doctor = models.Doctor(
-        user_id=user_id,
-        specialty=doctor.specialty,
-        phone_number=doctor.phone_number,
-        address=doctor.address
-    )
-    db.add(db_doctor)
+def confirm_doctor(db: Session, doctor_id: int) -> models.User:
+    db_doctor = db.query(models.User).filter(models.User.id == doctor_id).first()
+    db_doctor.is_confirmed = True
     db.commit()
     db.refresh(db_doctor)
     return db_doctor
 
-def get_doctor(db: Session, doctor_id: int):
-    return db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
+# def get_doctor(db: Session) -> List[models.User]:
+#     return db.query(models.User).all()
 
-def get_doctors(db: Session) -> List[models.Doctor]:
-    return db.query(models.Doctor).all()
+def get_doctors(db: Session) -> List[models.User]:
+    return db.query(models.User).filter(models.User.role == "doctor").all()
 
-def update_doctor(db: Session, doctor_id: int, doctor_update: schemas.DoctorCreate):
-    db_doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
-    if not db_doctor:
-        return None
-
-    db_doctor.specialty = doctor_update.specialty
-    db_doctor.phone_number = doctor_update.phone_number
-    db_doctor.address = doctor_update.address
-
-    db.commit()
-    db.refresh(db_doctor)
-    return db_doctor
-
-def delete_doctor(db: Session, doctor_id: int):
-    db_doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
-    if not db_doctor:
-        return None
-
-    db.delete(db_doctor)
-    db.commit()
-    return True
-
-# def confirm_doctor_registration(db: Session, doctor_id: int, doctor_update: schemas.DoctorCreate):
-#     db_doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
-#     if not db_doctor:
-#         return None
-#     # Placeholder for any specific actions for confirming a doctor
-#     db.commit()
-#     return db_doctor
-
+def get_patients(db: Session) -> List[models.User]:
+    return db.query(models.User).filter(models.User.role == "patient").all()
 # -------------------------
-# Appointment Management
+# Meeting Management
 # -------------------------
 
-# def create_appointment(db: Session, appointment: schemas.AppointmentCreate, doctor_id: int, patient_id: int):
-#     db_appointment = models.Appointment(
-#         patient_id=patient_id,
-#         doctor_id=doctor_id,
-#         appointment_date=appointment.appointment_date,
-#         reason=appointment.reason
-#     )
-#     db.add(db_appointment)
-#     db.commit()
-#     db.refresh(db_appointment)
-#     return db_appointment
-
-def create_appointment_request(db: Session, patient_id: int, doctor_id: int, appointment_data: schemas.AppointmentCreate):
-    db_appointment = models.Appointment(
+def create_meeting_request(db: Session, meeting_data: schemas.MeetingCreate, patient_id: int, doctor_id: int) -> models.Meeting:
+    db_meeting = models.Meeting(
         patient_id=patient_id,
         doctor_id=doctor_id,
-        appointment_date=appointment_data.appointment_date,
-        reason=appointment_data.reason
+        scheduled_date=meeting_data.scheduled_date,
+        status="Pending",
     )
-    db.add(db_appointment)
+    db.add(db_meeting)
     db.commit()
-    db.refresh(db_appointment)
-    return db_appointment
+    db.refresh(db_meeting)
+    return db_meeting
 
-def confirm_appointment(db: Session, appointment_id: int):
-    db_appointment = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
-    if not db_appointment:
+def confirm_meeting(db: Session, meeting_id: int, status: int) -> Optional[models.Meeting]:
+    # Map integer status codes to string values
+    status_mapping = {
+        1: "reject",
+        2: "confirmed"
+    }
+    # Validate the status value
+    if status not in status_mapping:
+        return False
+    # Fetch the meeting from the database
+    db_meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if not db_meeting:
         return None
-    # Placeholder for setting appointment confirmation details if needed
+    # Update the meeting status
+    db_meeting.status = status_mapping[status]
     db.commit()
-    db.refresh(db_appointment)
-    return db_appointment
+    db.refresh(db_meeting)
+    return db_meeting
 
-def get_appointment(db: Session, appointment_id: int):
-    return db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
 
-def get_appointments(db: Session) -> List[models.Appointment]:
-    return db.query(models.Appointment).all()
+def get_meeting(db: Session, meeting_id: int) -> Optional[models.Meeting]:
+    return db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
 
-def update_appointment(db: Session, appointment_id: int, appointment_update: schemas.AppointmentCreate):
-    db_appointment = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
-    if not db_appointment:
-        return None
+def get_meetings(db: Session) -> List[models.Meeting]:
+    return db.query(models.Meeting).all()
 
-    db_appointment.patient_id = appointment_update.patient_id
-    db_appointment.doctor_id = appointment_update.doctor_id
-    db_appointment.appointment_date = appointment_update.appointment_date
-    db_appointment.reason = appointment_update.reason
-
-    db.commit()
-    db.refresh(db_appointment)
-    return db_appointment
-
-def delete_appointment(db: Session, appointment_id: int):
-    db_appointment = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
-    if not db_appointment:
+def update_meeting(db: Session, meeting_id: int, meeting_update: schemas.MeetingCreate) -> Optional[models.Meeting]:
+    db_meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if not db_meeting:
         return None
 
-    db.delete(db_appointment)
+    db_meeting.scheduled_date = meeting_update.scheduled_date
+    db.commit()
+    db.refresh(db_meeting)
+    return db_meeting
+
+def delete_meeting(db: Session, meeting_id: int) -> bool:
+    db_meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if not db_meeting:
+        return False
+
+    db.delete(db_meeting)
     db.commit()
     return True
 
@@ -244,25 +144,24 @@ def delete_appointment(db: Session, appointment_id: int):
 # Medical Record Management
 # -------------------------
 
-def create_medical_record(db: Session, appointment_id: int, record_data: schemas.MedicalRecordCreate):
+def create_medical_record(db: Session, meeting_id: int, record_data: schemas.MedicalRecordCreate) -> models.MedicalRecord:
     db_record = models.MedicalRecord(
-        appointment_id=appointment_id,
+        meeting_id=meeting_id,
         description=record_data.description,
-        doctor_id=record_data.doctor_id,
-        created_at=datetime.utcnow()
+        created_at=datetime.utcnow(),
     )
     db.add(db_record)
     db.commit()
     db.refresh(db_record)
     return db_record
 
-def get_medical_record(db: Session, record_id: int):
+def get_medical_record(db: Session, record_id: int) -> Optional[models.MedicalRecord]:
     return db.query(models.MedicalRecord).filter(models.MedicalRecord.id == record_id).first()
 
 def get_medical_records(db: Session) -> List[models.MedicalRecord]:
     return db.query(models.MedicalRecord).all()
 
-def update_medical_record(db: Session, record_id: int, description: str):
+def update_medical_record(db: Session, record_id: int, description: str) -> Optional[models.MedicalRecord]:
     db_record = db.query(models.MedicalRecord).filter(models.MedicalRecord.id == record_id).first()
     if not db_record:
         return None
@@ -272,11 +171,57 @@ def update_medical_record(db: Session, record_id: int, description: str):
     db.refresh(db_record)
     return db_record
 
-def delete_medical_record(db: Session, record_id: int):
+def delete_medical_record(db: Session, record_id: int) -> bool:
     db_record = db.query(models.MedicalRecord).filter(models.MedicalRecord.id == record_id).first()
     if not db_record:
-        return None
+        return False
 
     db.delete(db_record)
+    db.commit()
+    return True
+
+# -------------------------
+# Medicine Management
+# -------------------------
+
+def create_medicine(db: Session, medicine_data: schemas.MedicineCreate, medical_record_id: int) -> models.Medicine:
+    db_medicine = models.Medicine(
+        name=medicine_data.name,
+        dosage=medicine_data.dosage,
+        frequency=medicine_data.frequency,
+        medical_record_id=medical_record_id,
+    )
+    db.add(db_medicine)
+    db.commit()
+    db.refresh(db_medicine)
+    return db_medicine
+
+def get_medicines_by_medical_record(db: Session, medical_record_id: int) -> List[models.Medicine]:
+    return db.query(models.Medicine).filter(models.Medicine.medical_record_id == medical_record_id).all()
+
+def get_medicine_by_id(db: Session, medicine_id: int) -> Optional[models.Medicine]:
+    return db.query(models.Medicine).filter(models.Medicine.id == medicine_id).first()
+
+def get_medicines(db: Session) -> List[models.Medicine]:
+    return db.query(models.Medicine).all()
+
+def update_medicine(db: Session, medicine_id: int, medicine_update: schemas.Medicine) -> Optional[models.Medicine]:
+    db_medicine = db.query(models.Medicine).filter(models.Medicine.id == medicine_id).first()
+    if not db_medicine:
+        return None
+
+    for key, value in medicine_update.dict(exclude_unset=True).items():
+        setattr(db_medicine, key, value)
+
+    db.commit()
+    db.refresh(db_medicine)
+    return db_medicine
+
+def delete_medicine(db: Session, medicine_id: int) -> bool:
+    db_medicine = db.query(models.Medicine).filter(models.Medicine.id == medicine_id).first()
+    if not db_medicine:
+        return False
+
+    db.delete(db_medicine)
     db.commit()
     return True

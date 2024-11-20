@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Enum
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Enum, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 import enum
@@ -15,71 +15,57 @@ class UserRole(str, enum.Enum):
 # User model with roles and active status
 class User(Base):
     __tablename__ = 'users'
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
-    full_name = Column(String)
+    name = Column(String, nullable=False)  # First Name
+    surname = Column(String, nullable=False)  # Last Name
     hashed_password = Column(String)
-    role = Column(Enum(UserRole))
+    is_confirmed = Column(Boolean, default=False)  # Required for doctors
+    role = Column(Enum(UserRole), nullable=False)
 
-    # Relationships to Patient and Doctor models, one-to-one
-    patient = relationship('Patient', back_populates='user', uselist=False)
-    doctor = relationship('Doctor', back_populates='user', uselist=False)
+    # Relationships
+    meetings_as_patient = relationship('Meeting', back_populates='patient', foreign_keys='Meeting.patient_id')
+    meetings_as_doctor = relationship('Meeting', back_populates='doctor', foreign_keys='Meeting.doctor_id')
 
-# Patient model with medical history and appointment relationship
-class Patient(Base):
-    __tablename__ = 'patients'
-    
+# Meeting model linking patients and doctors
+class Meeting(Base):
+    __tablename__ = 'meetings'
+
     id = Column(Integer, primary_key=True, index=True)
-    date_of_birth = Column(Date)
-    gender = Column(String)
-    phone_number = Column(String)
-    address = Column(String)
-    medical_history = Column(Text)
-    user_id = Column(Integer, ForeignKey('users.id'), unique=True)
+    patient_id = Column(Integer, ForeignKey('users.id'))
+    doctor_id = Column(Integer, ForeignKey('users.id'))
+    scheduled_date = Column(DateTime, nullable=False)
+    status = Column(String, default="Pending")  # Pending, Confirmed, Rescheduled, or Cancelled
 
-    user = relationship('User', back_populates='patient')
-    appointments = relationship('Appointment', back_populates='patient')
+    # Relationships
+    patient = relationship('User', back_populates='meetings_as_patient', foreign_keys=[patient_id])
+    doctor = relationship('User', back_populates='meetings_as_doctor', foreign_keys=[doctor_id])
+    medical_records = relationship('MedicalRecord', back_populates='meeting', cascade="all, delete")
 
-# Doctor model with confirmation and appointment/medical record relationships
-class Doctor(Base):
-    __tablename__ = 'doctors'
-    
-    id = Column(Integer, primary_key=True, index=True)
-    specialty = Column(String)
-    phone_number = Column(String)
-    address = Column(String)
-    is_confirmed = Column(Boolean, default=False)  # Added confirmation field
-    user_id = Column(Integer, ForeignKey('users.id'), unique=True)
-
-    user = relationship('User', back_populates='doctor')
-    appointments = relationship('Appointment', back_populates='doctor')
-    medical_records = relationship('MedicalRecord', back_populates='doctor')
-
-# Appointment model with cascade delete for related MedicalRecords
-class Appointment(Base):
-    __tablename__ = 'appointments'
-    
-    id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey('patients.id'))
-    doctor_id = Column(Integer, ForeignKey('doctors.id'))
-    appointment_date = Column(DateTime)
-    reason = Column(String)
-
-    patient = relationship('Patient', back_populates='appointments')
-    doctor = relationship('Doctor', back_populates='appointments')
-    medical_records = relationship('MedicalRecord', back_populates='appointment', cascade="all, delete")
-
-# Medical Record model with doctor relationship
+# Medical Record model for a meeting
 class MedicalRecord(Base):
     __tablename__ = 'medical_records'
-    
-    id = Column(Integer, primary_key=True, index=True)
-    appointment_id = Column(Integer, ForeignKey('appointments.id'))
-    description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    doctor_id = Column(Integer, ForeignKey('doctors.id'))
 
-    appointment = relationship('Appointment', back_populates='medical_records')
-    doctor = relationship('Doctor', back_populates='medical_records')
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey('meetings.id'))
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    meeting = relationship('Meeting', back_populates='medical_records', foreign_keys=[meeting_id])
+    medicines = relationship('Medicine', back_populates='medical_record', cascade="all, delete")
+
+# Medicine model linked to a medical record
+class Medicine(Base):
+    __tablename__ = 'medicines'
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    dosage = Column(Float, nullable=False)  # Example: 250.0 (mg)
+    frequency = Column(String, nullable=False)  # Example: "Twice a day"
+    medical_record_id = Column(Integer, ForeignKey('medical_records.id'), nullable=False)
+
+    # Relationships
+    medical_record = relationship('MedicalRecord', back_populates='medicines', foreign_keys=[medical_record_id])
