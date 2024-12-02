@@ -26,8 +26,8 @@ class User(Base):
     role = Column(Enum(UserRole), nullable=False)
 
     # Relationships
-    meetings_as_patient = relationship('Meeting', back_populates='patient', foreign_keys='Meeting.patient_id')
-    meetings_as_doctor = relationship('Meeting', back_populates='doctor', foreign_keys='Meeting.doctor_id')
+    meetings_as_patient = relationship('Meeting', back_populates='patient', foreign_keys='Meeting.patient_id',  cascade="all, delete")
+    meetings_as_doctor = relationship('Meeting', back_populates='doctor', foreign_keys='Meeting.doctor_id',  cascade="all, delete")
 
 # Meeting model linking patients and doctors
 class Meeting(Base):

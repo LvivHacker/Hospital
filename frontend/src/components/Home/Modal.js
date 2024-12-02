@@ -1,12 +1,11 @@
 import React, { useState } from "react";
 import "./Modal.css"; // Import custom styles
 
-const Modal = ({ active, handleModal, token, doctors, patientId }) => {
-  console.log("PatientId passed to Modal:", patientId);
-  
+const Modal = ({ active, handleModal, token, doctors, patientId, role }) => {  
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notes, setNotes] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -55,47 +54,36 @@ const Modal = ({ active, handleModal, token, doctors, patientId }) => {
     <div className={`modal ${active && "is-active"}`}>
       <div className="modal-background" onClick={handleModal}></div>
       <div className="modal-container">
-        <button className="close-button" onClick={handleModal}>
-          ✕
-        </button>
-        <form className="modal-form" onSubmit={handleSubmit}>
-          <h2>Request a Meeting</h2>
-          <div className="form-group">
-            <label>Select Doctor *</label>
-            <select
-              value={selectedDoctor}
-              onChange={(e) => setSelectedDoctor(e.target.value)}
-              required
-            >
-              <option value="" disabled>
-                Choose a doctor
-              </option>
-              {doctors.map((doctor) => (
-                <option key={doctor.id} value={doctor.id}>
-                  {doctor.name} {doctor.surname}
+      {role === "patient" ? (
+          <form className="modal-form" onSubmit={handleSubmit}>
+            <h2>Request a Meeting</h2>
+            <div className="form-group">
+              <label>Select Doctor *</label>
+              <select
+                value={selectedDoctor}
+                onChange={(e) => setSelectedDoctor(e.target.value)}
+                required
+              >
+                <option value="" disabled>
+                  Choose a doctor
                 </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Scheduled Date *</label>
-            <input
-              type="datetime-local"
-              value={scheduledDate}
-              onChange={(e) => setScheduledDate(e.target.value)}
-              required
-            />
-          </div>
-          {/* <div className="form-group">
-            <label>Message *</label>
-            <textarea
-              placeholder="Enter your message"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              required
-            ></textarea>
-          </div> */}
-          <footer className="modal-card-foot has-background-primary-light">
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    {doctor.name} {doctor.surname}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Scheduled Date *</label>
+              <input
+                type="datetime-local"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                required
+              />
+            </div>
+            <footer className="modal-card-foot has-background-primary-light">
               <button
                 className={`button is-primary ${loading ? "is-loading" : ""}`}
                 type="submit"
@@ -111,7 +99,41 @@ const Modal = ({ active, handleModal, token, doctors, patientId }) => {
                 Cancel
               </button>
             </footer>
-        </form>
+          </form>
+        ) : role === "doctor" ? (
+          <form className="modal-form" onSubmit={handleSubmit}>
+            <h2>Doctor Notes</h2>
+            <div className="form-group">
+              <label>Notes *</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                required
+                rows={5}
+              />
+            </div>
+            <footer className="modal-card-foot has-background-primary-light">
+              <button
+                className={`button is-primary ${loading ? "is-loading" : ""}`}
+                type="submit"
+                disabled={loading}
+              >
+                Save
+              </button>
+              <button
+                className="button"
+                onClick={() => handleModal()}
+                style={{ marginLeft: "10px" }}
+              >
+                Cancel
+              </button>
+            </footer>
+          </form>
+        ) : (
+          <div className="modal-content">
+            <p>Invalid role. Please contact support.</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -24,7 +24,7 @@
   }
   
   input {
-    width: 280px;
+    width: 100%;
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 5px;
@@ -100,7 +100,7 @@
   }
   
   .login-form input {
-    width: 100%;
+    width: 280px;
     padding: 8px;
     margin-bottom: 15px;
     border: 1px solid #ccc;

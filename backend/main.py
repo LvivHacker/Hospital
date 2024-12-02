@@ -117,6 +117,10 @@ async def delete_user(user_id: int, db: db_dependency):
 # ---------------
 # Admin Endpoints
 # ---------------
+@app.get("/patients", response_model=List[schemas.User], tags=["Admin"])
+async def list_patients(db: Session = Depends(get_db)):
+    return crud.get_patients(db)
+
 @app.put("/doctors/{doctor_id}/confirm", response_model=schemas.User)
 async def confirm_doctor_registration(user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not is_admin(current_user):
@@ -145,9 +149,31 @@ async def request_appointment(patient_id: int, doctor_id: int, meeting_data: sch
         raise HTTPException(status_code=403, detail="Only patients can request appointments")
     return crud.create_meeting_request(db, meeting_data, patient_id, doctor_id)
 
+@app.get("/patient_requests", response_model=List[schemas.Meeting])
+def get_patient_requests(
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(get_current_user)
+):
+    if current_user.role != "patient":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    requests = db.query(models.Meeting).filter(models.Meeting.patient_id == current_user.id).all()
+    return requests
+
 # -----------------
 # Doctor Endpoints
 # -----------------
+@app.get("/doctor_requests", response_model=List[schemas.Meeting])
+def get_doctor_requests(
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(get_current_user)
+):
+    if current_user.role != "doctor":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    requests = db.query(models.Meeting).filter(models.Meeting.doctor_id == current_user.id).all()
+    return requests
+
 @app.put("/meetings/{meeting_id}/{status}", tags=["Doctors"])
 async def confirm_meeting(meeting_id: int, status: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not is_doctor(current_user):
@@ -201,7 +227,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     # Pass the user's role to include it in the token payload
     access_token = create_access_token(
-        data={"sub": user.username, "name": user.name, "surname": user.surname},
+        data={"id": user.id, "sub": user.username, "name": user.name, "surname": user.surname},
         role=user.role,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
@@ -232,7 +258,7 @@ async def verify_user_token(token: str, db: Session = Depends(get_db)):
 
     # Pass role and name in data without using timedelta here
     new_token = create_access_token(
-        data={"sub": user.username, "name": user.name, "surname": user.surname},
+        data={"id": user.id, "sub": user.username, "name": user.name, "surname": user.surname},
         role = user.role,
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)  # Pass timedelta only as an argument here
     )
@@ -251,13 +277,14 @@ async def verify_user_token(token: str, db: Session = Depends(get_db)):
 async def refresh_access_token(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        id: int = payload.get("id")
         username: str = payload.get("sub")
         # if user_id is None or username is None or role is None:
         #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
         user = db.query(models.User).filter(models.User.username == username).first()
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        access_token = create_access_token(data={"sub": username}, role={"role": user.role})
+        access_token = create_access_token(data={"id": id, "sub": username}, role={"role": user.role})
 
         return {"access_token": access_token, "token_type": "bearer"}
 
@@ -265,32 +292,32 @@ async def refresh_access_token(token: str = Depends(oauth2_scheme), db: Session 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid refresh token")
 
 # ---------------------
-# Appointmnet Endpoints
+# Appointment Endpoints
 # ---------------------
 @app.get("/meetings", response_model=List[schemas.Meeting], tags=["Appointments"])
 async def list_meetings(db: db_dependency):
     return crud.get_meetings(db)
 
 @app.get("/meetings/{meeting_id}", response_model=schemas.Meeting, tags=["Appointments"])
-async def get_meeting(appointment_id: int, db: db_dependency):
-    appointment = crud.get_meeting(db, appointment_id)
+async def get_meeting(meeting_id: int, db: db_dependency):
+    appointment = crud.get_meeting(db, meeting_id)
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
     return appointment
 
 @app.put("/meetings/{meeting_id}", response_model=schemas.Meeting, tags=["Appointments"])
-async def update_meeting(appointment_id: int, appointment_update: schemas.MeetingCreate, db: db_dependency):
-    updated_appointment = crud.update_meeting(db, appointment_id, appointment_update)
+async def update_meeting(meeting_id: int, appointment_update: schemas.MeetingCreate, db: db_dependency):
+    updated_appointment = crud.update_meeting(db, meeting_id, appointment_update)
     if not updated_appointment:
-        raise HTTPException(status_code=404, detail="Appointment not found")
+        raise HTTPException(status_code=404, detail="Meeting not found")
     return updated_appointment
 
-@app.delete("/appointments/{appointment_id}", response_model=dict, tags=["Appointments"])
-async def delete_meeting(appointment_id: int, db: db_dependency):
-    result = crud.delete_meeting(db, appointment_id)
+@app.delete("/meetings/{meeting_id}", response_model=dict, tags=["Appointments"])
+async def delete_meeting(meeting_id: int, db: db_dependency):
+    result = crud.delete_meeting(db, meeting_id)
     if not result:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    return {"message": "Appointment deleted successfully"}
+    return {"message": "Meeting deleted successfully"}
 
 
 # -------------------------
