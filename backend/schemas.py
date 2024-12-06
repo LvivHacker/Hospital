@@ -4,10 +4,10 @@ from datetime import date, datetime
 import enum
 
 # Enum for User Roles
-class UserRole(str, enum.Enum):
-    admin = "admin"
-    doctor = "doctor"
-    patient = "patient"
+# class UserRole(str, enum.Enum):
+#     admin = "admin"
+#     doctor = "doctor"
+#     patient = "patient"
 
 # Base Schema for User
 class User(BaseModel):
@@ -16,7 +16,7 @@ class User(BaseModel):
     email: EmailStr
     name: str  # First name
     surname: str  # Last name
-    role: UserRole
+    role: str
 
     class Config:
         from_attributes = True
@@ -26,9 +26,9 @@ class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
-    role: UserRole
     name: str  # First name
     surname: str  # Last name
+    role: str
 
 # Base Schema for Meeting
 class Meeting(BaseModel):

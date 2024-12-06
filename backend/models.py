@@ -6,11 +6,11 @@ from datetime import datetime
 
 Base = declarative_base()
 
-# Enum for User Roles
-class UserRole(str, enum.Enum):
-    admin = "admin"
-    doctor = "doctor"
-    patient = "patient"
+# # Enum for User Roles
+# class UserRole(str, enum.Enum):
+#     admin = "admin"
+#     doctor = "doctor"
+#     patient = "patient"
 
 # User model with roles and active status
 class User(Base):
@@ -23,7 +23,7 @@ class User(Base):
     surname = Column(String, nullable=False)  # Last Name
     hashed_password = Column(String)
     is_confirmed = Column(Boolean, default=False)  # Required for doctors
-    role = Column(Enum(UserRole), nullable=False)
+    role = Column(String, nullable=False)
 
     # Relationships
     meetings_as_patient = relationship('Meeting', back_populates='patient', foreign_keys='Meeting.patient_id',  cascade="all, delete")
