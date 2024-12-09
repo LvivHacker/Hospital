@@ -1,13 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import date, datetime
-import enum
-
-# Enum for User Roles
-# class UserRole(str, enum.Enum):
-#     admin = "admin"
-#     doctor = "doctor"
-#     patient = "patient"
 
 # Base Schema for User
 class User(BaseModel):

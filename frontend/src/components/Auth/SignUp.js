@@ -89,15 +89,6 @@ const SignUp = () => {
             required
           />
 
-          <label>Confirm password</label>
-          <input
-            name="confirm password"
-            type="password"
-            placeholder="Confirm password"
-            onChange={handleChange}
-            required
-          />
-
           <label>Role</label>
           <select name="role" value={formData.role} onChange={handleChange}>
             <option value="patient">Patient</option>

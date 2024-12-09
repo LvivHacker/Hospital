@@ -1,16 +1,9 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Enum, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-import enum
 from datetime import datetime
 
 Base = declarative_base()
-
-# # Enum for User Roles
-# class UserRole(str, enum.Enum):
-#     admin = "admin"
-#     doctor = "doctor"
-#     patient = "patient"
 
 # User model with roles and active status
 class User(Base):

@@ -29,7 +29,7 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
 def get_user(db: Session, username: str) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.username == username).first()
 
-def get_user_by_id(db: Session, user_id: str) -> Optional[models.User]:
+def get_user_by_id(db: Session, user_id: int) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.id == user_id).first()
 
 def get_user_id(db: Session, username: str) -> Optional[int]:
@@ -79,6 +79,10 @@ def get_doctors(db: Session) -> List[models.User]:
 
 def get_patients(db: Session) -> List[models.User]:
     return db.query(models.User).filter(models.User.role == "patient").all()
+
+def get_confirmed_doctors(db: Session) -> List[models.User]:
+    return db.query(models.User).filter(models.User.role == "doctor", models.User.is_confirmed == True).all()
+
 # -------------------------
 # Meeting Management
 # -------------------------
@@ -95,11 +99,11 @@ def create_meeting_request(db: Session, meeting_data: schemas.MeetingCreate, pat
     db.refresh(db_meeting)
     return db_meeting
 
-def confirm_meeting(db: Session, meeting_id: int, status: int) -> Optional[models.Meeting]:
+def confirm_meeting(db: Session, meeting_id: int, status: int,) -> Optional[models.Meeting]:
     # Map integer status codes to string values
     status_mapping = {
-        1: "reject",
-        2: "confirmed"
+        1: "Reject",
+        2: "Confirmed"
     }
     # Validate the status value
     if status not in status_mapping:
@@ -166,10 +170,11 @@ def update_medical_record(db: Session, record_id: int, description: str) -> Opti
     if not db_record:
         return None
 
-    db_record.description = description
-    db.commit()
-    db.refresh(db_record)
+    db_record.description = description  # Update the description
+    db.commit()  # Commit the transaction
+    db.refresh(db_record)  # Refresh the instance with updated values
     return db_record
+
 
 def delete_medical_record(db: Session, record_id: int) -> bool:
     db_record = db.query(models.MedicalRecord).filter(models.MedicalRecord.id == record_id).first()
