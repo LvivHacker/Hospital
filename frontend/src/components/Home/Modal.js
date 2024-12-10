@@ -1,11 +1,40 @@
 import React, { useState } from "react";
 import "./Modal.css"; // Import custom styles
 
-const Modal = ({ active, handleModal, token, doctors, patientId, role }) => {  
+const Modal = ({ 
+  active, 
+  handleModal, 
+  token, 
+  doctors, 
+  patientId, 
+  role,
+  modalType, 
+  modalData  
+}) => {  
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [loading, setLoading] = useState(false);
-  const [notes, setNotes] = useState("");
+
+  const [selectedRecordId, setSelectedRecordId] = useState(
+    modalData?.medical_records?.[0]?.id || null
+  );
+
+  const selectedRecord = modalData?.medical_records?.find(
+    (record) => record.id === selectedRecordId
+  );
+
+  // Get current date and time in YYYY-MM-DDTHH:mm format
+  const getCurrentDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const minDateTime = getCurrentDateTime();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -49,12 +78,13 @@ const Modal = ({ active, handleModal, token, doctors, patientId, role }) => {
     }
   };
   
+  if (!active) return null;
 
   return (
     <div className={`modal ${active && "is-active"}`}>
       <div className="modal-background" onClick={handleModal}></div>
       <div className="modal-container">
-      {role === "patient" ? (
+        {role === "patient" && modalType !== "viewDetails" ? (
           <form className="modal-form" onSubmit={handleSubmit}>
             <h2>Request a Meeting</h2>
             <div className="form-group">
@@ -80,9 +110,11 @@ const Modal = ({ active, handleModal, token, doctors, patientId, role }) => {
                 type="datetime-local"
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
+                min={minDateTime} // Restrict past dates and times
                 required
               />
             </div>
+            
             <footer className="modal-card-foot has-background-primary-light">
               <button
                 className={`button is-primary ${loading ? "is-loading" : ""}`}
@@ -100,35 +132,54 @@ const Modal = ({ active, handleModal, token, doctors, patientId, role }) => {
               </button>
             </footer>
           </form>
-        ) : role === "doctor" ? (
-          <form className="modal-form" onSubmit={handleSubmit}>
-            <h2>Doctor Notes</h2>
-            <div className="form-group">
-              <label>Notes *</label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                required
-                rows={5}
-              />
-            </div>
-            <footer className="modal-card-foot has-background-primary-light">
-              <button
-                className={`button is-primary ${loading ? "is-loading" : ""}`}
-                type="submit"
-                disabled={loading}
-              >
-                Save
-              </button>
-              <button
-                className="button"
-                onClick={() => handleModal()}
-                style={{ marginLeft: "10px" }}
-              >
-                Cancel
-              </button>
-            </footer>
-          </form>
+        ) : modalType === "viewDetails" && modalData ? (
+          <div className="modal-content">
+            <h2>Medical Record Details</h2>
+
+            {/* Dropdown for selecting a medical record */}
+            {modalData.medical_records?.length > 0 ? (
+              <>
+                <label htmlFor="recordSelect" style={{ marginBottom: "10px", display: "block" }}>
+                  Select a Record:
+                </label>
+                <select
+                  id="recordSelect"
+                  value={selectedRecordId}
+                  onChange={(e) => setSelectedRecordId(parseInt(e.target.value))}
+                  style={{ marginBottom: "20px", padding: "5px", width: "100%" }}
+                >
+                  {modalData.medical_records.map((record) => (
+                    <option key={record.id} value={record.id}>
+                      {record.description} (Created: {new Date(record.created_at).toLocaleDateString()})
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <p>No medical records available.</p>
+            )}
+
+            {/* Display details for the selected record */}
+            {selectedRecord ? (
+              <>
+                <p><strong>Description:</strong> {selectedRecord.description}</p>
+                <p><strong>Created At:</strong> {new Date(selectedRecord.created_at).toLocaleString()}</p>
+                <h3>Prescribed Medications</h3>
+                <ul>
+                  {selectedRecord.medicines?.map((med, index) => (
+                    <li key={index}>
+                      <p><strong>Name:</strong> {med.name}</p>
+                      <p><strong>Dosage:</strong> {med.dosage}</p>
+                      <p><strong>Frequency:</strong> {med.frequency}</p>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>No medical record selected.</p>
+            )}
+            <button className="button" onClick={handleModal}>Close</button>
+          </div>
         ) : (
           <div className="modal-content">
             <p>Invalid role. Please contact support.</p>
@@ -140,4 +191,3 @@ const Modal = ({ active, handleModal, token, doctors, patientId, role }) => {
 };
 
 export default Modal;
-

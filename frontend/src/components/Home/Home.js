@@ -17,6 +17,8 @@ const HomePage = () => {
   const [showRequests, setShowRequests] = useState(false);
   const [showMedicalRecords, setShowMedicalRecords] = useState(false);
 
+  const [modalType, setModalType] = useState(null);
+  const [modalData, setModalData] = useState(null);
   const [isModalActive, setIsModalActive] = useState(false);
   const navigate = useNavigate();
 
@@ -145,27 +147,27 @@ const HomePage = () => {
   };
 
     //################################################################################
-  // const handleDelete = async (meetingId) => {
-  //   try {
-  //     const response = await fetch(`http://localhost:8000/meetings/${meetingId}`, {
-  //       method: "DELETE",
-  //       headers: {
-  //         Authorization: `Bearer ${token}`,
-  //       },
-  //     });
+  const handleDelete = async (meetingId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/meetings/${meetingId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
   
-  //     if (response.ok) {
-  //       // Remove the deleted request from the state
-  //       setRequests((prevRequests) => prevRequests.filter((req) => req.id !== meetingId));
-  //       console.log(`Meeting ${meetingId} deleted successfully.`);
-  //     } else {
-  //       const errorData = await response.json();
-  //       console.error(`Failed to delete meeting: ${errorData.detail}`);
-  //     }
-  //   } catch (error) {
-  //     console.error("Error deleting meeting:", error);
-  //   }
-  // };
+      if (response.ok) {
+        // Remove the deleted request from the state
+        setRequests((prevRequests) => prevRequests.filter((req) => req.id !== meetingId));
+        console.log(`Meeting ${meetingId} deleted successfully.`);
+      } else {
+        const errorData = await response.json();
+        console.error(`Failed to delete meeting: ${errorData.detail}`);
+      }
+    } catch (error) {
+      console.error("Error deleting meeting:", error);
+    }
+  };
 
   const handleDoctorDelete = async (doctorId) => {
     try {
@@ -321,6 +323,12 @@ const HomePage = () => {
     }
   };
 
+  const openDetailsModal = (data) => {
+    setModalType("viewDetails");
+    setModalData(data);
+    setIsModalActive(true);
+  };
+
   //################################################################################
   return (
     <div style={{ padding: "20px", fontFamily: "Arial" }}>
@@ -461,45 +469,57 @@ const HomePage = () => {
       {/* Requests List */}
       {showRequests && requests.length > 0 && (
         <div className="requests-container">
-        {requests.map((request) => (
-          <div className="request-card" key={request.id}>
-            <h2>Request {request.id}</h2>
-            <p>
-              <strong>Patient:</strong> {request.patient_id}
-            </p>
-            <p>
-              <strong>Doctor:</strong> {request.doctor_id}
-            </p>
-            <p>
-              <strong>Date:</strong> {request.scheduled_date}
-            </p>
-            <p>
-              <strong>Status:</strong> {request.status}
-            </p>
-            {userRole === "patient" | userRole === "doctor" && (
-              <div className="card-buttons">
-                <button className="update-btn" onClick={() => handleUpdate("request", request.id)}>
-                  Update
-                </button>
-                <button className="delete-btn" onClick={() => handlePatientDelete(request.id)}>
-                  Delete
-                </button>
-                {userRole === "doctor" && (       
-                <select 
-                  name="status" 
-                  value={request.status || 1}
-                  onChange={(e) => handleConfirmRequest(request.id, parseInt(e.target.value))}
-                >
-                  <option value={0}>Select Status</option>
-                  <option value={1}>Reject</option>
-                  <option value={2}>Confirmed</option>
-                </select>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          {requests.map((request) => (
+            <div className="request-card" key={request.id}>
+              <h2>Request {request.id}</h2>
+              <p>
+                <strong>Patient:</strong> {request.patient_id}
+              </p>
+              <p>
+                <strong>Doctor:</strong> {request.doctor_id}
+              </p>
+              <p>
+                <strong>Date:</strong> {request.scheduled_date}
+              </p>
+              <p>
+                <strong>Status:</strong> {request.status}
+              </p>
+              <button 
+                className="view-details-btn" 
+                onClick={() => openDetailsModal(request)}
+              >
+                View Details
+              </button>
+              {userRole === "patient" | userRole === "doctor" ? (
+                <div className="card-buttons">
+                  {/* Show "Update" and "Delete" only if the request is not rejected */}
+                  {request.status !== "Reject" && (
+                    <>
+                      <button className="update-btn" onClick={() => handleUpdate("request", request.id)}>
+                        Update
+                      </button>
+                      <button className="delete-btn" onClick={() => handleDelete(request.id)}>
+                        Delete
+                      </button>
+                    </>
+                  )}
+                  {/* Doctor-specific actions */}
+                  {userRole === "doctor" && (
+                    <select 
+                      name="status" 
+                      value={request.status || 0} // Default to 0 if status is not set
+                      onChange={(e) => handleConfirmRequest(request.id, parseInt(e.target.value))}
+                    >
+                      <option value={0}>Select Status</option>
+                      <option value={1}>Reject</option>
+                      <option value={2}>Confirmed</option>
+                    </select>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
       )}
 
       {showRequests && requests.length === 0 && (
@@ -507,6 +527,7 @@ const HomePage = () => {
           <h2>No Requests Found</h2>
         </div>
       )}
+
 
       {/* Medical Records List */}
       {showMedicalRecords && medicalRecords.length > 0 && (
@@ -525,7 +546,7 @@ const HomePage = () => {
               </p>
               <div className="card-buttons">
                 <button
-                  className="edit-btn"
+                  className="update-btn"
                   onClick={() => handleUpdate("record", record.id)}
                 >
                   Update
@@ -553,6 +574,8 @@ const HomePage = () => {
         <Modal
           active={isModalActive}
           handleModal={() => setIsModalActive(false)}
+          modalType={modalType}
+          modalData={modalData}
           token={token}
           doctors={doctors}
           patientId={userId}

@@ -72,6 +72,19 @@ const RequestUpdatePage = () => {
     }
   };
 
+   // Get current date and time in YYYY-MM-DDTHH:mm format
+   const getCurrentDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const minDateTime = getCurrentDateTime();
+
   return (
     <div>
       <h1>Update Request</h1>
@@ -83,6 +96,8 @@ const RequestUpdatePage = () => {
           type="datetime-local"
           value={updatedDate}
           onChange={(e) => setUpdatedDate(e.target.value)}
+          min={minDateTime} // Restrict past dates and times
+          required
         />
         <button onClick={handleUpdateAppointment}>Update Appointment</button>
       </section>
